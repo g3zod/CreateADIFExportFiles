@@ -206,6 +206,7 @@ namespace AdifReleaseLib
          *
          * <param name="adifStatus">The ADIF Specification status, which is "Proposed" or "Released".</param>
          * <param name="adifVersion">The ADIF Specification version, e.g. 3.1.5</param>
+         * <param name="adifDate">The ADIF Specification's date, e.g. 2024-11-03</param>
          * <param name="adifElement">The document element.</param>
          * 
          * <returns>The <see cref="XmlDocument"/> created.</returns>
@@ -213,6 +214,7 @@ namespace AdifReleaseLib
         public static XmlDocument CreateAdifExportXmlDocument(
             string adifVersion,
             string adifStatus,
+            DateTime adifDate,
             out XmlElement adifElement)
         {
             XmlDocument xmlDocument = new XmlDocument();
@@ -220,6 +222,11 @@ namespace AdifReleaseLib
             _ = xmlDocument.AppendChild(xmlDocument.CreateXmlDeclaration("1.0", "utf-8", string.Empty));
             adifElement = (XmlElement)xmlDocument.AppendChild(xmlDocument.CreateElement("adif"));
             adifElement.SetAttribute("version", adifVersion);
+            adifElement.SetAttribute("status", adifStatus);
+            if (adifDate != DateTime.MinValue)
+            {
+                adifElement.SetAttribute("date", XmlConvert.ToString(adifDate, XmlDateTimeSerializationMode.Utc));
+            }
             adifElement.SetAttribute("status", adifStatus);
             adifElement.SetAttribute("created", AdifReleaseLib.Common.GetXmlDateTimeNow());
 

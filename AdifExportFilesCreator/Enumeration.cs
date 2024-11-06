@@ -553,8 +553,21 @@ namespace AdifExportFilesCreator
 
             string baseFileName = $"enumerations_{Name.ToLower()}";
 #pragma warning disable format
-            ExportToCsvTsvExcel (Name, baseFileName, orderedHeaderRecord, orderedValueRecords);
-            ExportToXml         (Name, baseFileName, orderedHeaderRecord, orderedValueRecords, specification.AdifVersion, specification.AdifStatus, true, true);
+            ExportToCsvTsvExcel (
+                Name,
+                baseFileName,
+                orderedHeaderRecord,
+                orderedValueRecords);
+            ExportToXml         (
+                Name,
+                baseFileName,
+                orderedHeaderRecord,
+                orderedValueRecords,
+                specification.AdifVersion,
+                specification.AdifStatus,
+                specification.AdifDate,
+                true,
+                true);
 #pragma warning restore format
         }
 
@@ -596,16 +609,20 @@ namespace AdifExportFilesCreator
         }
 
         private static void ExportToXml(
+#pragma warning disable IDE0079
+#pragma warning disable layout, IDE0055
             string          enumerationName,
             string          baseFileName,
             List<string>    headerRecord, 
             List<string[]>  valueRecords, 
             string          adifVersion, 
             string          adifStatus, 
+            DateTime        adifDate,
             bool            addHeaderNamesToRecords, 
             bool            addEmptyValues)
+#pragma warning restore IDE0079, layout, IDE0055
         {
-            XmlDocument xmlDoc = Common.CreateAdifExportXmlDocument(adifVersion, adifStatus, out XmlElement adifEl);
+            XmlDocument xmlDoc = Common.CreateAdifExportXmlDocument(adifVersion, adifStatus, adifDate, out XmlElement adifEl);
 
             XmlElement enumerationsEl = (XmlElement)adifEl.AppendChild(xmlDoc.CreateElement("enumerations"));
             XmlElement enumerationEl = (XmlElement)enumerationsEl.AppendChild(xmlDoc.CreateElement("enumeration"));
@@ -803,7 +820,11 @@ namespace AdifExportFilesCreator
                     specification.Author,
                     content);
 
-                AllXmlDoc = Common.CreateAdifExportXmlDocument(specification.AdifVersion, specification.AdifStatus, out XmlElement adifEl);
+                AllXmlDoc = Common.CreateAdifExportXmlDocument(
+                    specification.AdifVersion,
+                    specification.AdifStatus,
+                    specification.AdifDate,
+                    out XmlElement adifEl);
 
                 AllEnumerationsEl = (XmlElement)adifEl.AppendChild(AllXmlDoc.CreateElement("enumerations"));
             }

@@ -170,8 +170,20 @@ namespace AdifExportFilesCreator
     public class Specification
     {
         private const string
-            Header_ADIF_Version = "ADIF Version",
-            Header_ADIF_Status = "ADIF Status";
+#pragma warning disable IDE0079
+#pragma warning disable layout, IDE0055
+
+            // These are used when writing out header records to the exported files.
+
+            Header_ADIF_Version =   "ADIF Version",
+            Header_ADIF_Status =    "ADIF Status",
+
+            // These are the names used in meta tags in the ADIF Specification XHTML file.
+
+            adifVersionMetaName =   "adifversion",
+            adifStatusMetaName =    "adifstatus",
+            adifDateMetaName =      "adifdate";  // Introduced at the proposed version of ADIF 3.1.5 dated 2024/11/06.
+#pragma warning restore layout, IDE0055, IDE0079
 
         /**
          * <summary>
@@ -233,6 +245,8 @@ namespace AdifExportFilesCreator
         internal string AdifVersion { get; }
 
         internal string AdifStatus { get; }
+
+        internal DateTime AdifDate { get; } = DateTime.MinValue;
 
         internal string GetTitle(string name) => $"{name} exported from {AdifStatus} ADIF Specification {AdifVersion}";
 
@@ -309,9 +323,7 @@ namespace AdifExportFilesCreator
                     // the specification may not contain the exact data expected by the program.
                     // Also, this version of the progrma has only been tested with the versions specified in the list.
 
-                    const string adifVersionMetaName = "adifversion";
-
-                    XmlElement adifVersionMeta = 
+                    XmlElement adifVersionMeta =
                         (XmlElement)xmlDocIn.DocumentElement.SelectSingleNode($"head/meta[@name='{adifVersionMetaName}']") ?? throw new AdifException($"No meta tag found with the name \"{adifVersionMetaName}\"");
 
                     AdifVersion = adifVersionMeta.GetAttribute("content");
@@ -334,9 +346,7 @@ namespace AdifExportFilesCreator
                     }
                 }
                 {
-                    const string adifStatusMetaName = "adifstatus";
-
-                    XmlElement adifStatusMeta = 
+                    XmlElement adifStatusMeta =
                         (XmlElement)xmlDocIn.DocumentElement.SelectSingleNode($"head/meta[@name='{adifStatusMetaName}']") ?? throw new AdifException($"No meta tag found with the name \"{adifStatusMetaName}\"");
 
                     AdifStatus = adifStatusMeta.GetAttribute("content");
@@ -356,6 +366,34 @@ namespace AdifExportFilesCreator
 
                         throw new AdifException(
                             $"ADIF Status is invalid: \"{(AdifStatus ?? "null")}\".\r\n\r\nSupported statuses are: {temp}");
+                    }
+                }
+                {
+                    XmlElement adifDateMeta =
+                        (XmlElement)xmlDocIn.DocumentElement.SelectSingleNode($"head/meta[@name='{adifDateMetaName}']");
+
+                    string contents = adifDateMeta?.GetAttribute("content");
+
+                    if (contents != null)
+                    {
+                        if (DateTime.TryParseExact(
+                                contents,
+                                "yyyy-MM-dd",
+                                System.Globalization.CultureInfo.InvariantCulture,
+                                System.Globalization.DateTimeStyles.AssumeUniversal,
+                                out DateTime date))
+                        {
+                            AdifDate = date;
+                        }
+                        else
+                        {
+                            throw new AdifException(
+                                $"The ADIF Specification's meta tag named \"adifDate\" contents are invalid: \"{contents}\"");
+                        }
+                    }
+                    else
+                    {
+                        Logger.Log("The ADIF Specification does not contain a valid meta tag named \"adifDate\"");
                     }
                 }
 

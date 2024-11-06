@@ -265,8 +265,19 @@ namespace AdifExportFilesCreator
                 out List<string> orderedHeaderRecord,
                 out List<string[]> orderedValueRecords);
 
-            ExportToCsvTsvExcel(name, orderedHeaderRecord, orderedValueRecords);
-            ExportToXml(name, orderedHeaderRecord, orderedValueRecords, specification.AdifVersion, specification.AdifStatus, true, true);
+            ExportToCsvTsvExcel(
+                name,
+                orderedHeaderRecord,
+                orderedValueRecords);
+            ExportToXml(
+                name,
+                orderedHeaderRecord,
+                orderedValueRecords,
+                specification.AdifVersion,
+                specification.AdifStatus,
+                specification.AdifDate,
+                true,
+                true);
         }
 
         private static void ExportToCsvTsvExcel(
@@ -314,10 +325,11 @@ namespace AdifExportFilesCreator
             List<string[]> valueRecords, 
             string adifVersion, 
             string adifStatus, 
+            DateTime adifDate,
             bool addHeaderNamesToRecords, 
             bool addEmptyValues)
         {
-            XmlDocument xmlDoc = Common.CreateAdifExportXmlDocument(adifVersion, adifStatus, out XmlElement adifEl);
+            XmlDocument xmlDoc = Common.CreateAdifExportXmlDocument(adifVersion, adifStatus, adifDate, out XmlElement adifEl);
 
             XmlElement fieldsEl = (XmlElement)adifEl.AppendChild(xmlDoc.CreateElement("fields"));
             XmlElement headerEl = (XmlElement)fieldsEl.AppendChild(xmlDoc.CreateElement("header"));
