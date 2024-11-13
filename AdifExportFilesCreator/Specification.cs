@@ -383,7 +383,9 @@ namespace AdifExportFilesCreator
                                 System.Globalization.DateTimeStyles.AssumeUniversal,
                                 out DateTime date))
                         {
-                            AdifDate = date;
+                            // Despite various changes to the above, the DateTimeKind never comes out as UTC, so force it.
+
+                            AdifDate = new DateTime(date.Year, date.Month, date.Day, 00, 00, 00, DateTimeKind.Utc);
                         }
                         else
                         {
