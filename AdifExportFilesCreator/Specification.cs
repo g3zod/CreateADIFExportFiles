@@ -185,6 +185,16 @@ namespace AdifExportFilesCreator
             adifDateMetaName =      "adifdate";  // Introduced at the proposed version of ADIF 3.1.5 dated 2024/11/06.
 #pragma warning restore layout, IDE0055, IDE0079
 
+        private static DateTime ConvertDateToUtc(string value)
+        {
+            // https://stackoverflow.com/questions/3556144/how-to-create-a-net-datetime-from-iso-8601-format
+
+            return DateTime.Parse(
+                value.Contains('Z') ? value : value + "Z",
+                null,
+                System.Globalization.DateTimeStyles.RoundtripKind);
+        }
+
         /**
          * <summary>
          *   A delegate type for reporting progress back to calling code that can be logged or displalyed.
@@ -376,22 +386,7 @@ namespace AdifExportFilesCreator
 
                     if (contents != null)
                     {
-                        if (DateTime.TryParseExact(
-                                contents,
-                                "yyyy-MM-dd",
-                                System.Globalization.CultureInfo.InvariantCulture,
-                                System.Globalization.DateTimeStyles.AssumeUniversal,
-                                out DateTime date))
-                        {
-                            // Despite various changes to the above, the DateTimeKind never comes out as UTC, so force it.
-
-                            AdifDate = new DateTime(date.Year, date.Month, date.Day, 00, 00, 00, DateTimeKind.Utc);
-                        }
-                        else
-                        {
-                            throw new AdifException(
-                                $"The ADIF Specification's meta tag named \"adifDate\" contents are invalid: \"{contents}\"");
-                        }
+                        AdifDate = ConvertDateToUtc(contents);
                     }
                     else
                     {
