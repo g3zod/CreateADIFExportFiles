@@ -190,7 +190,7 @@ namespace AdifExportFilesCreator
             // https://stackoverflow.com/questions/3556144/how-to-create-a-net-datetime-from-iso-8601-format
 
             return DateTime.Parse(
-                value.Contains('Z') ? value : value + "Z",
+                value.ToUpper().Contains('Z') ? value : value + "Z",
                 null,
                 System.Globalization.DateTimeStyles.RoundtripKind);
         }
