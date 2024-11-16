@@ -10,6 +10,18 @@ namespace AdifReleaseLib
      * <summary>
      *   This class contains commonly used methods and properties.
      * </summary>
+     * 
+     * <remarks>
+     *   The project file (AdifReleaseLib.csprog) has an additional tag added to the first <![CDATA[<PropertyGroup>]]>:
+     *      <para>
+     *        <![CDATA[<ResolveComReferenceSilent>True</ResolveComReferenceSilent>]]>
+     *      </para>
+     *   This is to suppress an apparently benign, but irritating, warning that was occurring:
+     *   <para>
+     *      Warning (active) MSB3305 Processing COM reference "Microsoft.Office.Core" from path "C:\Program Files\Microsoft Office\Root\VFS\ProgramFilesCommonX64\Microsoft Shared\OFFICE16\MSO.DLL". Type library importer encountered a property getter 'Type' on type 'Microsoft.Office.Core.SeriesGradientStopColorFormat' without a valid return type.  The importer will attempt to import this property as a method instead.	AdifReleaseLib	C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\amd64\Microsoft.Common.CurrentVersion.targets
+     *   </para>
+     *   Ref. <see href="https://developercommunity.visualstudio.com/t/VisuaL-studio-2022-MSB3305-Processing-CO/10556150"/>
+     * </remarks>
      */
     public class Common
     {
@@ -18,23 +30,15 @@ namespace AdifReleaseLib
          *   <para>
          *      An <see cref="Encoding"/> object for Windows-1252.
          *   </para>
-         *   <para>
-         *     In .NET 8, Encoding.GetEncoding does not support Windows-1252 and instead it's necessary to call<br/>
-         *     &#160;&#160;CodePagesEncodingProvider.Instance.GetEncoding(1252);<br/>
-         *     To cater for this in the future, all code that requires Windows-1252 will use this field so that
-         *     several code changes will not be required.
-         *   
-         *     Note: NETFRAMEWORK is defined in the project's Properties / Build / "Conditional&#160;Compilation&#160;symbols:"
-         *     i.e. it is not something declared automatically in Visual Studio projects.
-         *   </para>
+         *   <remarks>
+         *     In .NET 8, Encoding.GetEncoding does not support Windows-1252 and instead it's necessary to call
+         *     <para>
+         *       CodePagesEncodingProvider.Instance.GetEncoding(1252);
+         *     </para>
+         *   </remarks>
          * </value>
          */
-        public static readonly Encoding Windows1252Encoding =
-#if NETFRAMEWORK
-            Encoding.GetEncoding("Windows-1252");
-#else
-            CodePagesEncodingProvider.Instance.GetEncoding(1252);
-#endif
+        public static readonly Encoding Windows1252Encoding = CodePagesEncodingProvider.Instance.GetEncoding(1252);
 
         /**
          * <summary>
@@ -113,7 +117,7 @@ namespace AdifReleaseLib
         {
             try
             {
-                FileInfo fileInfo = new FileInfo(filePath);
+                FileInfo fileInfo = new(filePath);
                 DateTime utcNow = DateTime.UtcNow;
 
                 fileInfo.CreationTimeUtc = utcNow;
@@ -170,7 +174,7 @@ namespace AdifReleaseLib
          */
         public static string ReplaceWhiteSpace(string text)
         {
-            StringBuilder output = new StringBuilder(1024);
+            StringBuilder output = new(1024);
             bool inWhiteSpace = false;
 
             foreach (char c in text)
@@ -217,7 +221,7 @@ namespace AdifReleaseLib
             DateTime adifDate,
             out XmlElement adifElement)
         {
-            XmlDocument xmlDocument = new XmlDocument();
+            XmlDocument xmlDocument = new();
 
             _ = xmlDocument.AppendChild(xmlDocument.CreateXmlDeclaration("1.0", "utf-8", string.Empty));
             adifElement = (XmlElement)xmlDocument.AppendChild(xmlDocument.CreateElement("adif"));
@@ -228,7 +232,7 @@ namespace AdifReleaseLib
                 adifElement.SetAttribute("date", XmlConvert.ToString(adifDate, XmlDateTimeSerializationMode.Utc));
             }
             adifElement.SetAttribute("status", adifStatus);
-            adifElement.SetAttribute("created", AdifReleaseLib.Common.GetXmlDateTimeNow());
+            adifElement.SetAttribute("created", GetXmlDateTimeNow());
 
             return xmlDocument;
         }
@@ -248,13 +252,13 @@ namespace AdifReleaseLib
         {
             while (text.StartsWith("\r\n"))
             {
-                text = text.Substring(2);
+                text = text[2..];
             }
             int indexOfCrLf = text.IndexOf("\r\n");
 
             if (indexOfCrLf > 0)
             {
-                text = text.Substring(0, indexOfCrLf);
+                text = text[..indexOfCrLf];
             }
             return text;
         }
