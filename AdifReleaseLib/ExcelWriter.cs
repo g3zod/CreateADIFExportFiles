@@ -60,10 +60,7 @@ namespace AdifReleaseLib
         {
             this.xlsxFileName = xlsxFileName;
             this.odsFileName  = odsFileName;
-            if (application == null)
-            {
-                application = new Excel.Application();
-            }
+            application ??= new Excel.Application();
             workBook = application.Workbooks.Add(missing);
             workBook.EnableAutoRecover = false;
             workBook.Title = title;
@@ -72,7 +69,7 @@ namespace AdifReleaseLib
             WriteCustomProperty("ADIF Status", adifStatus);
             workSheet = (Excel.Worksheet)application.Worksheets[1];
             workSheet.Name = sheetName.Length > 31 ?
-                sheetName.Substring(0, 31) :
+                sheetName[..31] :
                 sheetName;
             recordBuilder = new List<string>(50);
         }
@@ -96,11 +93,11 @@ namespace AdifReleaseLib
             object oDocCustomProps = workBook.CustomDocumentProperties;
             Type typeDocCustomProps = oDocCustomProps.GetType();
 
-            object[] oArgs = {
+            object[] oArgs = [
                 name,
                 false,
                 Microsoft.Office.Core.MsoDocProperties.msoPropertyTypeString,
-                value};
+                value];
 
             typeDocCustomProps.InvokeMember(
                 "Add",
@@ -172,7 +169,7 @@ namespace AdifReleaseLib
                          item2.Length.ToString(),
                          maxLength.ToString()));
 
-                    recordBuilder[2] = item2.Substring(0, maxLength - suffix.Length) + suffix;
+                    recordBuilder[2] = item2[..(maxLength - suffix.Length)] + suffix;
                     rng.Value2 = recordBuilder.ToArray();
                 }
                 else
