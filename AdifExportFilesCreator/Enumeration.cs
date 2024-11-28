@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Xml;
+using System.Text.Json;
+using AdifExportFilesCreator.AdifExportObjects;
 
 namespace AdifExportFilesCreator
 {
@@ -12,13 +14,17 @@ namespace AdifExportFilesCreator
      *   This class exports the enumerations in the ADIF Specification XHTML file as associated files for
      *   including in the released files.<br/>
      *   <br/>
-     *   The files comprise CSV (.csv), TSV (.tsv), XML (.xml), Microsoft Excel (.xlsx), and OpenSource Calc (.ods) files.
+     *   The files comprise CSV (.csv), TSV (.tsv), XML (.xml), Microsoft Excel (.xlsx), and Apache OpenSource Calc (.ods) files.
      * </summary>
+     * 
+     * <remarks>
+     *   Also JSON (.json) is now created but for the time being is not officially included in ADIF releases.
+     * </remarks>
      */
     internal class Enumeration
     {
         private const int MaxFields = 20;
-        private static readonly char[] commaSplitChar = new char[] { ',' };
+        private static readonly char[] commaSplitChar = [','];
 
 #pragma warning disable format, IDE0055
         private const string
@@ -26,10 +32,10 @@ namespace AdifExportFilesCreator
             SecondaryAdministrativeSubdivisionName      = "Secondary_Administrative_Subdivision",
             SecondaryAdministrativeSubdivisionAltName   = "Secondary_Administrative_Subdivision_Alt";
 
-        private readonly List<string>               fieldNames      = new List<string>              (MaxFields);
-        private readonly List<string[]>             fields          = new List<string[]>            (MaxFields);
-        private readonly Dictionary<string, int>    fieldMap        = new Dictionary<string, int>   (MaxFields);
-        private string[]                            htmlFieldNames  = null;
+        private readonly List<string>               fieldNames      = new(MaxFields);
+        private readonly List<string[]>             fields          = new(MaxFields);
+        private readonly Dictionary<string, int>    fieldMap        = new(MaxFields);
+        private string[]                            htmlFieldNames;
 #pragma warning restore format, IDE0055
 
         private int AddField(string fieldName)
@@ -301,7 +307,7 @@ namespace AdifExportFilesCreator
                 }
                 else
                 {
-                    StringBuilder comments = new StringBuilder(256);
+                    StringBuilder comments = new(256);
                     string[] values = new string[fieldNames.Count];
                     bool importOnly = false;
                     XmlNodeList nodes = row.GetElementsByTagName("td");
@@ -312,7 +318,7 @@ namespace AdifExportFilesCreator
                             Common.ReplaceWhiteSpace(nodes[cellIndex].InnerText).Trim() :
                             string.Empty;
 
-                        if (value.ToLower().Contains("import-only"))
+                        if (value.Contains("import-only", StringComparison.OrdinalIgnoreCase))
                         {
                             importOnly = true;
                         }
@@ -322,21 +328,21 @@ namespace AdifExportFilesCreator
                             cellIndex == qslViaDescriptionColumn ||
                             cellIndex == secondaryAdministrativeSubdivisionColumn)
                         {
-                            int bracketPosition = value.IndexOfAny(new char[] { '(', '{', '[' });
+                            int bracketPosition = value.IndexOfAny(['(', '{', '[']);
 
                             if (bracketPosition >= 0)
                             {
                                 string newComment = value.Substring(bracketPosition + 1, value.Length - bracketPosition - 2);
 
-                                if (!comments.ToString().ToLower().Contains(newComment.ToLower()))
+                                if (!comments.ToString().Contains(newComment, StringComparison.OrdinalIgnoreCase))
                                 {
                                     if (comments.Length > 0)
                                     {
-                                        comments.Append("; ");
+                                        _ = comments.Append("; ");
                                     }
-                                    comments.Append(newComment);
+                                    _ = comments.Append(newComment);
                                 }
-                                value = value.Substring(0, bracketPosition).Trim();
+                                value = value[..bracketPosition].Trim();
                             }
                         }
 
@@ -360,19 +366,19 @@ namespace AdifExportFilesCreator
                         if (cellIndex == submodesColumn &&
                             value.IndexOf(',') > 0)
                         {
-                            StringBuilder newSubmodes = new StringBuilder(1024);
+                            StringBuilder newSubmodes = new(1024);
 
                             foreach (string submode in value.Split(
                                 commaSplitChar,
                                 StringSplitOptions.RemoveEmptyEntries))
                             {
-                                newSubmodes.Append(submode.Trim()).Append(',');
+                                _ = newSubmodes.Append(submode.Trim()).Append(',');
                             }
-                            value = newSubmodes.ToString().Substring(0, newSubmodes.Length-1);
+                            value = newSubmodes.ToString()[..(newSubmodes.Length - 1)];
                         }
 
                         if ((cellIndex == creditForColumn || cellIndex == arrlSectionDxccEntityCodeColumn) &&
-                            value.IndexOf(' ') >= 0)
+                            value.Contains(' '))
                         {
                             value = value.Replace(" ", string.Empty);
                         }
@@ -381,21 +387,13 @@ namespace AdifExportFilesCreator
 
                         if (cellIndex == deletedColumn)
                         {
-                            if (value.Length >0)
+                            if (value.Length > 0)
                             {
-                                switch (value.ToLower())
+                                value = value.ToLower() switch
                                 {
-                                    //case "n":
-                                    //    break;
-
-                                    case "y":
-                                    case "deleted":
-                                        value = "Deleted";
-                                        break;
-
-                                    default:
-                                        throw new AdifException($"Unexpected value for 'Deleted' in enumeration '{enumerationName}': value='{value}'");
-                                }
+                                    "y" or "deleted" => "Deleted",
+                                    _ => throw new AdifException($"Unexpected value for 'Deleted' in enumeration '{enumerationName}': value='{value}'"),
+                                };
                             }                            
                         }
 
@@ -440,10 +438,10 @@ namespace AdifExportFilesCreator
 
                                 if (comments.Length > 0)
                                 {
-                                    comments.Append("; ");
+                                    _ = comments.Append("; ");
                                 }
-                                comments.Append(value.Substring(posn + 3));
-                                value = value.Substring(0, posn);
+                                _ = comments.Append(value.AsSpan(posn + 3));
+                                value = value[..posn];
                             }
 
                             posn = value.IndexOf(" (");
@@ -451,10 +449,10 @@ namespace AdifExportFilesCreator
                             {
                                 if (comments.Length > 0)
                                 {
-                                    comments.Append("; ");
+                                    _ = comments.Append("; ");
                                 }
-                                comments.Append(value.Substring(posn + 2, value.Length - posn - 3));
-                                value = value.Substring(0, posn);
+                                _ = comments.Append(value.AsSpan(posn + 2, value.Length - posn - 3));
+                                value = value[..posn];
                             }                            
                         }
                         values[fieldMap[htmlFieldNames[cellIndex]]] = value;
@@ -462,7 +460,7 @@ namespace AdifExportFilesCreator
                     }
                     values[enumerationNameColumn]   = enumerationName;
                     values[importOnlyColumn]        = importOnly ? "Import-only" : string.Empty;
-                    values[commentsColumn]          = comments.ToString().ToLower() == "import-only" ? string.Empty : comments.ToString();
+                    values[commentsColumn]          = comments.ToString().Equals("import-only", StringComparison.OrdinalIgnoreCase) ? string.Empty : comments.ToString();
 
                     if (isPrimaryAdministrativeSubdivision)
                     {
@@ -529,7 +527,7 @@ namespace AdifExportFilesCreator
                         if (value == null)
                         {
                             const string nullDisplay = "null";
-                            StringBuilder valuesList = new StringBuilder(values.Length);
+                            StringBuilder valuesList = new(values.Length);
 
                             foreach (string temp in values)
                             {
@@ -568,6 +566,16 @@ namespace AdifExportFilesCreator
                 specification.AdifDate,
                 true,
                 true);
+            ExportToJson(
+                Name,
+                baseFileName,
+                orderedHeaderRecord,
+                orderedValueRecords,
+                specification.AdifVersion,
+                specification.AdifStatus,
+                specification.AdifDate,
+                true,
+                true);
 #pragma warning restore format
         }
 
@@ -577,15 +585,15 @@ namespace AdifExportFilesCreator
             List<string>    headerRecord, 
             List<string[]>  valueRecords)
         {
-            using (AdifReleaseLib.CsvWriter csvWriter =
-                new AdifReleaseLib.CsvWriter(Path.Combine(specification.ExportsCsvPath, $"{baseFileName}.csv")))
+            using (CsvWriter csvWriter =
+                new(Path.Combine(specification.ExportsCsvPath, $"{baseFileName}.csv")))
             {
                 specification.ExportToTableWriter(csvWriter, headerRecord, valueRecords);
                 specification.ExportToTableWriter(AllCsvWriter, headerRecord, valueRecords);
             }
 
-            using (AdifReleaseLib.TsvWriter tsvWriter =
-                new AdifReleaseLib.TsvWriter(Path.Combine(specification.ExportsTsvPath, $"{baseFileName}.tsv")))
+            using (TsvWriter tsvWriter =
+                new(Path.Combine(specification.ExportsTsvPath, $"{baseFileName}.tsv")))
             {
                 specification.ExportToTableWriter(tsvWriter, headerRecord, valueRecords);
                 specification.ExportToTableWriter(AllTsvWriter, headerRecord, valueRecords);
@@ -593,19 +601,17 @@ namespace AdifExportFilesCreator
 
             string content = enumerationName + " Enumeration";
 
-            using (AdifReleaseLib.ExcelWriter excelWriter =
-                new AdifReleaseLib.ExcelWriter(
+            using ExcelWriter excelWriter =
+                new(
                     Path.Combine(specification.ExportsXlsxPath, $"{baseFileName}.xlsx"),
                     Path.Combine(specification.ExportsOdsPath, $"{baseFileName}.ods"),
                     specification.AdifVersion,
                     specification.AdifStatus,
                     specification.GetTitle(content),
-                    specification.Author,
-                    content))
-            {
-                specification.ExportToTableWriter(excelWriter,    headerRecord, valueRecords);
-                specification.ExportToTableWriter(AllExcelWriter, headerRecord, valueRecords);
-            }
+                    Specification.Author,
+                    content);
+            specification.ExportToTableWriter(excelWriter, headerRecord, valueRecords);
+            specification.ExportToTableWriter(AllExcelWriter, headerRecord, valueRecords);
         }
 
         private static void ExportToXml(
@@ -655,22 +661,12 @@ namespace AdifExportFilesCreator
                         }
                         if (value.Length > 0)
                         {
-                            switch (title.ToUpper())
+                            valueEl.InnerText = title.ToUpper() switch
                             {
-                                case "DELETED":
-                                case "IMPORT-ONLY":
-                                    valueEl.InnerText = XmlConvert.ToString(true);
-                                    break;
-
-                                case "DELETED DATE":
-                                case "FROM DATE":
-                                    valueEl.InnerText = AdifReleaseLib.Common.GetXmlDate(DateTime.Parse(value));
-                                    break;
-
-                                default:
-                                    valueEl.InnerText = value;
-                                    break;
-                            }
+                                "DELETED" or "IMPORT-ONLY" => XmlConvert.ToString(true),
+                                "DELETED DATE" or "FROM DATE" => AdifReleaseLib.Common.GetXmlDate(DateTime.Parse(value)),
+                                _ => value,
+                            };
                         }
                     }
                     i++;
@@ -682,6 +678,220 @@ namespace AdifExportFilesCreator
 
             xmlDoc.Save(fileName);
             AdifReleaseLib.Common.SetFileTimesToNow(fileName);
+        }
+
+        private static void ExportToJson(
+#pragma warning disable IDE0079
+#pragma warning disable layout, IDE0055
+            string          enumerationName,
+            string          baseFileName,
+            List<string>    headerRecord, 
+            List<string[]>  valueRecords, 
+            string          adifVersion, 
+            string          adifStatus, 
+            DateTime        adifDate,
+#pragma warning disable IDE0060 // Remove unused parameter
+            bool            addHeaderNamesToRecords,
+            bool            addEmptyValues)
+#pragma warning restore IDE0060 // Remove unused parameter
+#pragma warning restore IDE0079, layout, IDE0055
+        {
+            Export export = Specification.CreateExportObject(
+                adifVersion,
+                adifStatus,
+                adifDate);
+
+            Adif adif = export.Adif;
+
+            {
+                bool isPrimaryAdministrativeSubdivision = enumerationName == PrimaryAdministrativeSubdivisionName;
+
+                int dxccEntityCodeColumnIndex = -1,
+                    deletedColumnIndex = -1;
+
+                for (int i = 0; i < headerRecord.Count; i++)
+                {
+                    string headerName = headerRecord[i];
+
+                    switch (headerName.ToUpper())
+                    {
+                        case "DXCC ENTITY CODE":
+                            dxccEntityCodeColumnIndex = i;
+                            break;
+
+                        case "DELETED":
+                            deletedColumnIndex = i;
+                            break;
+
+                        default:
+                            break;
+                    }
+                }
+
+                AdifExportObjects.Enumeration enumeration = new()
+                {
+                    Header = [.. headerRecord]
+                };
+                adif.Enumerations = [];
+
+                if (Specification.ExportJsonRecordsAlt)
+                {
+                    enumeration.RecordsAlt = [];
+
+                    foreach (string[] valueRecord in valueRecords)
+                    {
+                        int i = 0;
+
+                        Record record = [];
+
+                        foreach (string value in valueRecord)
+                        {
+                            if ((!addEmptyValues) || value.Length > 0)
+                            {
+                                string title = headerRecord[i];
+
+                                switch (title.ToUpper())
+                                {
+                                    case "DELETED":
+                                    case "IMPORT-ONLY":
+                                        record.Add(title, Specification.JsonTrueAsString);
+                                        break;
+
+                                    case "DELETED DATE":
+                                    case "FROM DATE":
+                                        record.Add(title, Specification.ConvertDateToJsonUtcString(value));
+                                        break;
+
+                                    default:
+                                        record.Add(title, value);
+                                        break;
+                                }
+                            }
+                            i++;
+                        }
+                        enumeration.RecordsAlt.Add(record);
+                    }
+                }
+                
+                if (Specification.ExportJsonRecords)
+                {
+                    enumeration.Records = [];
+
+                    string abbreviation = string.Empty;
+
+                    foreach (string[] valueRecord in valueRecords)
+                    {
+                        int i = 0;
+
+                        Record record = [];
+
+                        foreach (string value in valueRecord)
+                        {
+                            if (i == 1)
+                            {
+                                abbreviation = value;
+                                if (isPrimaryAdministrativeSubdivision)
+                                {
+                                    // Primary Administrative Subdivision abbreviations are not unique, so the JSON
+                                    // Property name is made up of the cod and DXCC entity number, e.g.
+                                    //   MEX.50
+                                    // where the code is MEX and the DXCC entity number is 50.
+                                    //
+                                    // Also, Property names are duplicated when a code has two records for a single
+                                    // DXCC entity where one code is marked as "Deleted".
+                                    //
+                                    // To cater for this, the Property name has ".Deleted" appended, for example:
+                                    //   "051.5.Deleted"
+                                    //
+                                    // There is a potential flaw in this if there is the same "Code" has more than one
+                                    // "Deleted" record within a DXCC.  This has not happened so far.
+                                    // Possibly such future "Deleted" records could be merged in the ADIF Specification
+                                    // and there would be no issue.
+                                    //
+                                    // An alternative approach could be to include a serial number in the Property name,
+                                    // e.g.
+                                    //   "051.5.Deleted.0"
+                                    //   "051.5.Deleted.1"
+                                    //   ...
+                                    //
+                                    // However, the issue with that is allocating the serial number such that does not
+                                    // change between releases of the ADIF Specification ... although that could be
+                                    // avoided by being careful with the order of records in the ADIF Specification.
+                                    //
+                                    // While having more complex property names than code.dxcc makes them difficult to find
+                                    // using indexing, it is still possible to find them by iterating through the array of
+                                    // properties and inspecting the "Code" key/value pair, in which the "Code" value is
+                                    // unadorned.  Here is an example - note that "Code" just contains "051":
+                                    /*
+                                          "051.5.Deleted": {
+                                            "Enumeration Name": "Primary_Administrative_Subdivision",
+                                            "Code": "051",
+                                            "Primary Administrative Subdivision": "Märket",
+                                            "DXCC Entity Code": "5",
+                                            "Deleted": "true"
+                                          },
+                                     */
+
+#pragma warning disable format
+                                    string
+                                        dxccEntityCode =    valueRecord[dxccEntityCodeColumnIndex],
+                                        deleted =           valueRecord[deletedColumnIndex];
+#pragma warning restore
+                                    abbreviation = $"{abbreviation}.{dxccEntityCode}";
+                                    if (deleted.Length > 0)
+                                    {
+                                        abbreviation = $"{abbreviation}.{deleted}";
+                                    }
+                                }
+                            }
+
+                            if ((!addEmptyValues) || value.Length > 0)
+                            {
+                                string title = headerRecord[i];
+
+                                switch (title.ToUpper())
+                                {
+                                    case "DELETED":
+                                    case "IMPORT-ONLY":
+                                        record.Add(title, Specification.JsonTrueAsString);
+                                        break;
+
+                                    case "DELETED DATE":
+                                    case "FROM DATE":
+                                        record.Add(title, Specification.ConvertDateToJsonUtcString(value));
+                                        break;
+
+                                    default:
+                                        record.Add(title, value);
+                                        break;
+                                }
+                            }
+                            i++;
+                        }
+                        try
+                        {
+                            enumeration.Records.Add(abbreviation, record);
+                        }
+                        catch (Exception ex)
+                        {
+                            throw new AdifException(
+                                $"Exception adding {abbreviation} to {enumerationName}",
+                                ex);
+                        }
+                    }
+                }
+                adif.Enumerations.Add(enumerationName, enumeration);
+                AllEnumerationsJsonExport.Adif.Enumerations.Add(enumerationName, enumeration);
+                specification.AllJsonExport.Adif.Enumerations.Add(enumerationName, enumeration);
+            }
+
+            string filePath = Path.Combine(specification.ExportsJsonPath, $"{baseFileName}.json");
+
+            string json = JsonSerializer.Serialize(export, typeof(Export), Specification.JsonSerializerOptions);
+
+            File.WriteAllText(filePath, json, Encoding.UTF8);
+
+            AdifReleaseLib.Common.SetFileTimesToNow(filePath);
         }
 
         private void OrderColumnsForExport(
@@ -714,7 +924,7 @@ namespace AdifExportFilesCreator
                 }
                 if (!found)
                 {
-                    StringBuilder temp = new StringBuilder(1024);
+                    StringBuilder temp = new(1024);
 
                     foreach (string fieldName in fieldNames)
                     {
@@ -726,14 +936,14 @@ namespace AdifExportFilesCreator
                 }
             }
 
-            List<string> orderedHeaderRecord = new List<string>(20);
+            List<string> orderedHeaderRecord = new(20);
 
             for (int index = 0; index < columnMapIndexes.Length && columnMapIndexes[index] >= 0; index++)
             {
                 orderedHeaderRecord.Add(fieldNames[columnMapIndexes[index]]);
             }
 
-            List<string[]> orderedValueRecords = new List<string[]>(fields.Count);
+            List<string[]> orderedValueRecords = new(fields.Count);
 
             foreach (string[] valueRecord in fields)
             {
@@ -784,7 +994,7 @@ namespace AdifExportFilesCreator
                 "Enumeration Name",
                 defaultTitles,
                 "Import-only",
-                "Comments").Split(new char[] { ',' });
+                "Comments").Split([',']);
         }
 #pragma warning disable format
         private static AdifReleaseLib.CsvWriter     AllCsvWriter        = null;
@@ -792,6 +1002,8 @@ namespace AdifExportFilesCreator
         private static AdifReleaseLib.ExcelWriter   AllExcelWriter      = null;
         private static XmlDocument                  AllXmlDoc           = null;
         private static XmlElement                   AllEnumerationsEl   = null;
+
+        private static AdifExportObjects.Export     AllEnumerationsJsonExport = null;
 #pragma warning restore format
 
         /**
@@ -817,7 +1029,7 @@ namespace AdifExportFilesCreator
                     specification.AdifVersion,
                     specification.AdifStatus,
                     specification.GetTitle(content),
-                    specification.Author,
+                    Specification.Author,
                     content);
 
                 AllXmlDoc = Common.CreateAdifExportXmlDocument(
@@ -827,6 +1039,15 @@ namespace AdifExportFilesCreator
                     out XmlElement adifEl);
 
                 AllEnumerationsEl = (XmlElement)adifEl.AppendChild(AllXmlDoc.CreateElement("enumerations"));
+
+                AllEnumerationsJsonExport = Specification.CreateExportObject(
+                    specification.AdifVersion,
+                    specification.AdifStatus,
+                    specification.AdifDate);
+
+                AllEnumerationsJsonExport.Adif.Enumerations = [];
+
+                specification.AllJsonExport.Adif.Enumerations = [];
             }
             catch
             {
@@ -836,6 +1057,8 @@ namespace AdifExportFilesCreator
                 AllTsvWriter        = null;
                 AllXmlDoc           = null;
                 AllEnumerationsEl   = null;
+
+                AllEnumerationsJsonExport = null;
 #pragma warning disable format
 
                 throw;
@@ -871,6 +1094,17 @@ namespace AdifExportFilesCreator
                 AllXmlDoc = null;
 
                 AdifReleaseLib.Common.SetFileTimesToNow(fileName);
+
+                {
+                    string allJsonFileName = Path.Combine(specification.ExportsJsonPath, "enumerations.json");
+                    string json = JsonSerializer.Serialize(AllEnumerationsJsonExport, Specification.JsonSerializerOptions);
+
+                    AllEnumerationsJsonExport = null;
+
+                    File.WriteAllText(allJsonFileName, json, Encoding.UTF8);
+
+                    AdifReleaseLib.Common.SetFileTimesToNow(allJsonFileName);
+                }
             }
         }
 
@@ -890,11 +1124,11 @@ namespace AdifExportFilesCreator
          */
         internal static void GetEnumerationName(string id, out string enumerationName, out int dxccEntity)
         {
-            enumerationName = id.Substring("Enumeration_".Length);
+            enumerationName = id["Enumeration_".Length..];
 
             if (enumerationName.StartsWith(PrimaryAdministrativeSubdivisionName))
             {
-                string dxccEntityValue = enumerationName.Substring(PrimaryAdministrativeSubdivisionName.Length + 1);
+                string dxccEntityValue = enumerationName[(PrimaryAdministrativeSubdivisionName.Length + 1)..];
 
                 dxccEntity = int.Parse(dxccEntityValue);
                 enumerationName = PrimaryAdministrativeSubdivisionName;
@@ -903,14 +1137,14 @@ namespace AdifExportFilesCreator
             {
                 // Must check the _Alt name first because the non-_Alt check will match both cases.
 
-                string dxccEntityValue = enumerationName.Substring(SecondaryAdministrativeSubdivisionAltName.Length + 1);
+                string dxccEntityValue = enumerationName[(SecondaryAdministrativeSubdivisionAltName.Length + 1)..];
 
                 dxccEntity = int.Parse(dxccEntityValue);
                 enumerationName = SecondaryAdministrativeSubdivisionAltName;
             }
             else if (enumerationName.StartsWith(SecondaryAdministrativeSubdivisionName))
             {
-                string dxccEntityValue = enumerationName.Substring(SecondaryAdministrativeSubdivisionName.Length + 1);
+                string dxccEntityValue = enumerationName[(SecondaryAdministrativeSubdivisionName.Length + 1)..];
 
                 dxccEntity = int.Parse(dxccEntityValue);
                 enumerationName = SecondaryAdministrativeSubdivisionName;

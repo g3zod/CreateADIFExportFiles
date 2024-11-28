@@ -1,9 +1,11 @@
-/*
+﻿/*
  * This class exports the ADIF Specification XHTML file as associated files for including as part of the release of a
  * new version of the ADIF Specification.
  * 
- * The files comprise CSV (.csv), TSV (.tsv), XML (.xml), Excel (.xlsx), and OpenOffice Calc (.ods) files containing
+ * The files comprise CSV (.csv), TSV (.tsv), XML (.xml), Microsoft Excel (.xlsx), and Apache OpenOffice Calc (.ods) files containing
  * data types, enumerations, and fields.
+ * 
+ * Also JSON (.json) is now created but for the time being is not officially included in ADIF releases.
  * 
  * The files are stored in subdirectories within the directory that contains the source ADIF Specification XHTML file
  * (e.g. for ADIF version 3.0.6 the directory name is 306):
@@ -41,9 +43,16 @@
  *    exports/xml/enumerations_{name}.xml   - XML file containing the enumeration with the name {name}.
  *    exports/xml/fields.xml                - XML file containing the fields.
  *
+ *    exports/json                           - Directory for JSON (.json) files.
+ *    exports/json/all.json                   - JSON file containing the data types, enumerations, and fields.
+ *    exports/json/datatypes.json             - JSON file containing the data types.
+ *    exports/json/enumerations.json          - JSON file containing the enumerations.
+ *    exports/json/enumerations_{name}.json   - JSON file containing the enumeration with the name {name}.
+ *    exports/json/fields.json                - JSON file containing the fields.
+ *
  * Notes:
  * 
- *  * The CSV, TSV, and XML files are encoded as UTF-8 with a byte order mark (BOM) of 0xEF, 0xBB, 0xBF at the
+ *  * The CSV, TSV, XML, and JSON files are encoded as UTF-8 with a byte order mark (BOM) of 0xEF, 0xBB, 0xBF at the
  *    start of the file.  These 3 bytes can be ignored but are included for compatibility with Microsoft software.
  * 
  *  * CSV file values are enclosed by double quotes (") and any double quotes embedded within the value are
@@ -62,6 +71,11 @@
  *    -  The datatypes.xml file omits the <enumerations> and <fields> elements. 
  *    -  The enumerations.xml and named enumeration XML files omit the <dataTypes> and <fields> elements. 
  *    -  The fields.xml file omits the <dataTypes> and <enumerations> elements. 
+ * 
+ *  * All the JSON files have the same overall structure as the all.json file, the differences being that:
+ *    -  The datatypes.json file has a null value for the Enumerations and Fields objects. 
+ *    -  The enumerations.json and named enumeration JSON files have null values for the DataTypes and Fields objects. 
+ *    -  The fields.json file has a null value for the DataTypes and Enumerations objects. 
  * 
  *  * The Excel and OpenOffice Calc files have the font in header records set to 'bold'.
  *    The work sheet names are set as appropriate to:
@@ -152,7 +166,12 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
+using System.Text.Encodings.Web;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.Unicode;
 using System.Xml;
 using AdifReleaseLib;
 
@@ -163,15 +182,24 @@ namespace AdifExportFilesCreator
      *   This class exports the ADIF Specification XHTML file as associated files for including as part of the release of a
      *   new version of the ADIF Specification.<br/>
      *   <br/>
-     *   The files comprise CSV (.csv), TSV (.tsv), XML (.xml), Microsoft Excel (.xlsx), and OpenOffice Calc (.ods) files
+     *   The files comprise CSV (.csv), TSV (.tsv), XML (.xml), Microsoft Excel (.xlsx), and Apache OpenOffice Calc (.ods) files
      *   containing data types, enumerations, and fields.
      * </summary>
+     * 
+     * <remarks>
+     *   Also JSON (.json) is now created but for the time being is not officially included in ADIF releases.
+     * </remarks>
+     * 
      */
     public class Specification
     {
-        private const string
 #pragma warning disable IDE0079
 #pragma warning disable layout, IDE0055
+        public const bool
+            ExportJsonRecordsAlt =  true,
+            ExportJsonRecords =     true;
+
+        private const string
 
             // These are used when writing out header records to the exported files.
 
@@ -185,15 +213,64 @@ namespace AdifExportFilesCreator
             adifDateMetaName =      "adifdate";  // Introduced at the proposed version of ADIF 3.1.5 dated 2024/11/06.
 #pragma warning restore layout, IDE0055, IDE0079
 
-        private static DateTime ConvertDateToUtc(string value)
-        {
-            // https://stackoverflow.com/questions/3556144/how-to-create-a-net-datetime-from-iso-8601-format
+        /**
+         * <summary>
+         *   Returns a string containing a bool true value in JSON format.
+         * </summary>
+         */
+        public static readonly string JsonTrueAsString = JsonSerializer.Serialize(true);
 
-            return DateTime.Parse(
-                value.ToUpper().Contains('Z') ? value : value + "Z",
-                null,
-                System.Globalization.DateTimeStyles.RoundtripKind);
-        }
+        /**
+         * <summary>
+         *   Converts a date from the ADIF Specification (e.g. "2024-11-13") to a UTC <see cref="DateTime"/>.
+         *   <see cref=""/>
+         * </summary>
+         * 
+         * <remarks>See <see href="https://stackoverflow.com/questions/3556144/how-to-create-a-net-datetime-from-iso-8601-format"/></remarks>
+         */
+        private static DateTime ConvertDateToUtc(string value) => DateTime.Parse(
+            value.Contains('Z', StringComparison.OrdinalIgnoreCase) ? value : value + 'Z',
+            null,
+            System.Globalization.DateTimeStyles.RoundtripKind);
+
+        /**
+         * <summary>
+         *   Converts a date <see cref="string"/> from the ADIF Specification (e.g. "2024-11-13") to a <see cref="string"/> containing
+         *   a universal form of the date (e.g. "2024-11-13T00:00:00Z").
+         * </summary>
+         */
+        public static string ConvertDateToJsonUtcString(string value) => JsonSerializer.Serialize(
+            ConvertDateToUtc(value)).Replace(
+                "\"",
+                string.Empty);
+
+        /**
+         * <returns>
+         *   Returns a <see cref="JsonSerializerOptions"/> object that reduces the need for escape sequences
+         *   and provides formatted output.
+         * </returns>
+         */
+        public static readonly JsonSerializerOptions JsonSerializerOptions = new()
+        {
+            // "UnicodeRanges.All" is misleading; perhaps because the encoder is aimed at JavaScript rather than
+            // specifically JSON, it still encodes some characters that are legal in JSON string literals,
+            // noticeably (so far):
+            //
+            //      26  &  ampersand
+            //      27  '  apostrophe
+            //      3C  <  less than sign
+            //      3E  >  greater than sign
+
+            Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
+            WriteIndented = true
+        };
+
+        /**
+         * <summary>
+         *   An object that is used to serialize JSON for the all.json file.
+         * </summary>
+         */
+        public AdifExportObjects.Export AllJsonExport;
 
         /**
          * <summary>
@@ -246,7 +323,8 @@ namespace AdifExportFilesCreator
             ExportsTsvPath,
             ExportsXlsxPath,
             ExportsOdsPath,
-            ExportsXmlPath;
+            ExportsXmlPath,
+            ExportsJsonPath;
 
         private readonly SortedDictionary<string, Enumeration> enumerations;
         private readonly FieldList fields;
@@ -260,7 +338,7 @@ namespace AdifExportFilesCreator
 
         internal string GetTitle(string name) => $"{name} exported from {AdifStatus} ADIF Specification {AdifVersion}";
 
-        internal string Author => "ADIF Development Group";
+        internal static string Author => "ADIF Development Group";
 
         /**
          * <summary>
@@ -277,16 +355,16 @@ namespace AdifExportFilesCreator
          *   The versions of ADIF supported by this version of the program.
          * </value>
          **/
-        private readonly string[] SupportedVersions = new string[] {
+        private readonly string[] SupportedVersions = [
             "3.1.4",
             "3.1.5",
-        };
+        ];
 
-        private readonly string[] SupportedStatuses = new string[] {
+        private readonly string[] SupportedStatuses = [
             "Draft",
             "Proposed",
             "Released",
-        };
+        ];
 
         /**
          * <summary>
@@ -305,12 +383,15 @@ namespace AdifExportFilesCreator
             ProgressReporter reportProgress,
             UserPrompter promptUser)
         {
+#if INCLUDE_TEST_CODE
+            Extensions.TestExtensionMethods();
+#endif            
             ReportProgress = reportProgress;
             PromptUser = promptUser;
 
             ReportProgress?.Invoke($"Reading specification {htmlDocumentPath} ...");
-#pragma warning disable format 
-            enumerations        = new SortedDictionary<string, Enumeration>();
+#pragma warning disable format
+            enumerations        = [];
             fields              = new FieldList("fields", this);
             dataTypes           = new DataTypeList("dataTypes", this);
             ExportsPath         = Path.Combine(Path.GetDirectoryName(htmlDocumentPath), "exports");
@@ -319,6 +400,7 @@ namespace AdifExportFilesCreator
             ExportsXlsxPath     = Path.Combine(ExportsPath, "xlsx");
             ExportsOdsPath      = Path.Combine(ExportsPath, "ods");
             ExportsXmlPath      = Path.Combine(ExportsPath, "xml");
+            ExportsJsonPath     = Path.Combine(ExportsPath, "json");
             StartupPath         = startupPath;
 #pragma warning restore format
             xmlDocIn = LoadAdifSpecification(htmlDocumentPath);
@@ -340,7 +422,7 @@ namespace AdifExportFilesCreator
 
                     if (AdifVersion == null || (Array.IndexOf(SupportedVersions, AdifVersion) < 0))
                     {
-                        StringBuilder temp = new StringBuilder(SupportedVersions.Length * 7);  // 5 characters + 2 more to allow for ", ".
+                        StringBuilder temp = new(SupportedVersions.Length * 7);  // 5 characters + 2 more to allow for ", ".
 
                         foreach (string supportedVersion in SupportedVersions)
                         {
@@ -363,7 +445,7 @@ namespace AdifExportFilesCreator
 
                     if (AdifStatus == null || !(Array.IndexOf(SupportedStatuses, AdifStatus) >= 0))
                     {
-                        StringBuilder temp = new StringBuilder(128);
+                        StringBuilder temp = new(128);
 
                         foreach (string supportedStatus in SupportedStatuses)
                         {
@@ -403,7 +485,7 @@ namespace AdifExportFilesCreator
                 {
                     string fileName = Path.GetFileName(htmlDocumentPath);
 
-                    if (fileName.ToLower().Contains("annotated.htm"))
+                    if (fileName.Contains("annotated.htm", StringComparison.OrdinalIgnoreCase))
                     {
                         if (PromptUser == null ||
                             PromptUser(
@@ -481,6 +563,22 @@ namespace AdifExportFilesCreator
          * <summary>
          *   Exports an ADIF Specification's data types, enumerations and fields as files.<br/>
          * </summary>
+         * 
+         * <remarks>
+         *   <para>
+         *      The JSON files are created by populating the <see cref="AdifExportObjects"/> classes and then
+         *      using C# <see cref="JsonSerializer"/> classes to create a JSON string.
+         *    </para>
+         *   <para>
+         *      This not the only, or most direct, method of doing this.  Alternatives would be to use
+         *      <see cref="Utf8JsonWriter"/> or <see cref="JsonNode"/>.  However, using the C# classes
+         *      ensures that the they can be used to both serialize and de-serialize the JSON.
+         *   </para>
+         *   <para>
+         *     Note: The <see cref="ValidateAllJson(string)"/> method has examples of using the <see cref="AdifExportObjects"/>,
+         *     <see cref="JsonDocument"/>, and <see cref="JsonNode"/> classes to extra data from the JSON all.json file.
+         *   </para>
+         * </remarks>
          */
         public void Export()
         {
@@ -488,6 +586,8 @@ namespace AdifExportFilesCreator
 
             try
             {
+                AllJsonExport = CreateExportObject(AdifVersion, AdifStatus, AdifDate);
+
                 CleanFiles();
                 ExportSchema();
                 ExportDataTypes();
@@ -504,7 +604,7 @@ namespace AdifExportFilesCreator
         }
 
         /**
-         * <summary>
+         * <summary>    
          *   Removes any files and sub-directories under "\export" leaving behind empty csv, ods, tsv, xlsx and xml sub-directories.
          * </summary>
          */
@@ -545,7 +645,8 @@ namespace AdifExportFilesCreator
                     ExportsTsvPath,
                     ExportsXlsxPath,
                     ExportsOdsPath,
-                    ExportsXmlPath
+                    ExportsXmlPath,
+                    ExportsJsonPath,
                 })
             {
                 _ = Directory.CreateDirectory(fileTypeDirectoryName);
@@ -620,8 +721,8 @@ namespace AdifExportFilesCreator
                 enumerationsXml;
 
             XmlDocument
-                rootAllDoc      = new XmlDocument(),
-                doc             = new XmlDocument();
+                rootAllDoc = new(),
+                doc = new();
 
             ReportProgress?.Invoke("Exporting all ...");
 
@@ -635,11 +736,368 @@ namespace AdifExportFilesCreator
 
             rootAllDoc.DocumentElement.InnerXml = rootAllDoc.DocumentElement.InnerXml + enumerationsXml + fieldsXml;
 
-            string fileName = Path.Combine(ExportsXmlPath, "all.xml");
+            {
+                string allXmlFileName = Path.Combine(ExportsXmlPath, "all.xml");
 
-            rootAllDoc.Save(fileName);
-            AdifReleaseLib.Common.SetFileTimesToNow(fileName);
+                rootAllDoc.Save(allXmlFileName);
+                AdifReleaseLib.Common.SetFileTimesToNow(allXmlFileName);
+            }
+            {
+                string allJsonFileName = Path.Combine(ExportsJsonPath, "all.json");
+                string json = JsonSerializer.Serialize(AllJsonExport, JsonSerializerOptions);
+
+                File.WriteAllText(allJsonFileName, json, Encoding.UTF8);
+                Common.SetFileTimesToNow(allJsonFileName);
+
+                ValidateAllJson(allJsonFileName);
+            }
         }
+    
+        private const string ExpectedResults_314 =
+@"Data Type Name, Data Type Indicator, Description, Minimum Value, Maximum Value, Import-only, Comments
+Enumeration Name, Abbreviation, Section Name, DXCC Entity Code, From Date, Deleted Date, Import-only, Comments
+Field Name, Data Type, Enumeration, Description, Header Field, Minimum Value, Maximum Value, Import-only, Comments
+Alaska
+Bistrita-Nasaud
+ADIF_VER
+CREATED_TIMESTAMP
+PROGRAMID
+PROGRAMVERSION
+USERDEFn
+Boolean B
+Number N
+Date D
+Time T
+String S
+IntlString I
+MultilineString M
+IntlMultilineString G
+Enumeration E
+Location L
+";
+
+        private const string ExpectedResults_315 =
+@"Data Type Name, Data Type Indicator, Description, Minimum Value, Maximum Value, Import-only, Comments
+Enumeration Name, Abbreviation, Section Name, DXCC Entity Code, From Date, Deleted Date, Import-only, Comments
+Field Name, Data Type, Enumeration, Description, Header Field, Minimum Value, Maximum Value, Import-only, Comments
+Alaska
+Bistrița-Năsăud
+ADIF_VER
+CREATED_TIMESTAMP
+PROGRAMID
+PROGRAMVERSION
+USERDEFn
+Boolean B
+Number N
+Date D
+Time T
+String S
+IntlString I
+MultilineString M
+IntlMultilineString G
+Enumeration E
+Location L
+";
+
+        /**
+         * <summary>
+         *   This performs some tests on the all.json file by de-serializing its contents into
+         *   <see cref="AdifExportObjects"/>, <see cref="JsonDocument"/>, and <see cref="JsonNode"/> objects
+         *   and extracting various data from them and saving it in a <see cref="StringBuilder"/> object.
+         *   That is then compared again the expected strings for each version of ADIF.
+         * </summary>
+         * 
+         * <remarks>
+         *   It is almost certainly overkill using all three types of object, but the source code does also 
+         *   serve as guide to extracting information from them (which is not always self-evident).
+         * </remarks>
+         * 
+         * <param name="path">The path to the all.json file.</param>
+         */
+        private void ValidateAllJson(string path)
+        {
+            ReportProgress?.Invoke($"Validating all.json ...");
+
+            string json = File.ReadAllText(path, Encoding.UTF8);
+            StringBuilder results = new(32768);
+
+            string expectedResults = AdifVersion switch
+            {
+                "3.1.4" => ExpectedResults_314,
+                "3.1.5" => ExpectedResults_315,
+                _ => string.Empty,
+            };
+
+            {
+                ///////////////////////////////////////////
+                // Validate using AdifExportObjects.Export.
+                ///////////////////////////////////////////
+
+                AdifExportObjects.Export export = JsonSerializer.Deserialize<AdifExportObjects.Export>(json);
+
+                results.Clear();
+
+                {
+                    // Structure / Ensure Headers are correct in DataTypes, one Enumeration, and Fields.
+
+                    // Func<AdifExportObjects.Header, string> HeaderToString = list =>
+                    //    list == null ? "null" : string.Join(", ", list);
+
+                    static string HeaderToString(AdifExportObjects.Header header) =>
+                        header == null ? "Header == null" : string.Join(", ", header);
+
+                    _ = results
+                        .AppendLine(HeaderToString(export.Adif.DataTypes.Header))
+                        .AppendLine(HeaderToString(export.Adif.Enumerations["ARRL_Section"].Header))
+                        .AppendLine(HeaderToString(export.Adif.Fields.Header));
+                }
+                {
+                    // Enumerations / ARRL_Sect
+
+                    string arrlAkSectionName = export.Adif.Enumerations["ARRL_Section"].Records["AK"]["Section Name"];
+
+                    _ = results.AppendLine(arrlAkSectionName);
+                }
+                {
+                    // Primary Administrative Subdivision / Romania / BN
+                    // The object names for Primary Administrative Subdivision are in the form code.dxcc, so the name is BN.275
+
+                    string romaniaPasBn = export.Adif.Enumerations["Primary_Administrative_Subdivision"].Records["BN.275"]["Primary Administrative Subdivision"];
+
+                    _ = results.AppendLine(romaniaPasBn);
+                }
+                {
+                    // Header fields.
+
+                    AdifExportObjects.Records records = export.Adif.Fields.Records;
+
+                    foreach (string fieldName in records.Keys)
+                    {
+                        AdifExportObjects.Record value = records[fieldName];
+
+                        // If it is not a header field, the item with the name (key) "Header Field" is omitted,
+                        // so TryGetValue is needed rather than fetching the field and checking if its value is "Y".
+
+                        if (value.TryGetValue("Header Field", out _))
+                        {
+                            _ = results.AppendLine(fieldName);
+                        }
+                    }
+                }
+                {
+                    // Datatypes that have Data Type Indicators.
+
+                    AdifExportObjects.DataTypes dataTypes = export.Adif.DataTypes;
+
+                    foreach (string dataTypeName in dataTypes.Records.Keys)
+                    {
+                        AdifExportObjects.Record dataType = dataTypes.Records[dataTypeName];
+
+                        // If there is no Data Type Indicator, the item with the name (key) "Data Type Indicator" is omitted,
+                        // so TryGetValue is needed before fetching the value for the name (key) "Data Type Indicator".
+
+                        if (dataType.TryGetValue("Data Type Indicator", out string dataTypeIndicator))
+                        {
+                            _ = results.AppendLine($"{dataTypeName} {dataTypeIndicator}");
+                        }
+                    }
+                }
+
+                string compareLinesResult = results.ToString().CompareLines(expectedResults);
+
+                if (compareLinesResult.Length != 0)
+                {
+                    throw new AdifException($"Validation using AdifExportObjects.Export failed: {compareLinesResult}");
+                }
+            }
+
+            {
+                ///////////////////////////////
+                // Validate using JsonDocument.
+                ///////////////////////////////
+
+                JsonDocument jsonDocument = JsonSerializer.Deserialize<JsonDocument>(json);
+
+                results.Clear();
+
+                {
+                    // Structure / Ensure Headers are correct in DataTypes, one Enumeration, and Fields.
+
+                    static string HeaderToString(JsonElement header)
+                    {
+                        StringBuilder listString = new(512);
+
+                        foreach (JsonElement value in header.EnumerateArray())
+                        {
+                            if (listString.Length != 0)
+                            {
+                                _ = listString.Append(", "); 
+                            }
+                            _ = listString.Append(value.GetString());
+                        }
+                        return listString.ToString();
+                    }
+
+                    _ = results
+                        .AppendLine(HeaderToString(jsonDocument.RootElement.GetProperty("Adif").GetProperty("DataTypes").GetProperty("Header")))
+                        .AppendLine(HeaderToString(jsonDocument.RootElement.GetProperty("Adif").GetProperty("Enumerations").GetProperty("ARRL_Section").GetProperty("Header")))
+                        .AppendLine(HeaderToString(jsonDocument.RootElement.GetProperty("Adif").GetProperty("Fields").GetProperty("Header")));
+                }
+                {
+                    // Enumerations / ARRL_Sect
+
+                    string arrlAkSectionName = jsonDocument.RootElement.GetProperty("Adif").GetProperty("Enumerations").GetProperty("ARRL_Section").GetProperty("Records").GetProperty("AK").GetProperty("Section Name").GetString();
+
+                    _ = results.AppendLine(arrlAkSectionName);
+                }
+                {
+                    // Primary Administrative Subdivision / Romania / BN
+                    // The object names for Primary Administrative Subdivision are in the form code.dxcc, so the name is BN.275
+
+                    string romaniaPasBn = jsonDocument.RootElement.GetProperty("Adif").GetProperty("Enumerations").GetProperty("Primary_Administrative_Subdivision").GetProperty("Records").GetProperty("BN.275").GetProperty("Primary Administrative Subdivision").GetString();
+
+                    _ = results.AppendLine(romaniaPasBn);
+                }
+                {
+                    // Header fields.
+
+                    JsonElement records = jsonDocument.RootElement.GetProperty("Adif").GetProperty("Fields").GetProperty("Records");
+
+                    foreach (JsonProperty field in records.EnumerateObject())
+                    {
+                        string fieldName = field.Name;
+
+                        // If it is not a header field, the item with the name (key) "Header Field" is omitted,
+                        // so TryGetProperty is needed rather than fetching the field and checking if its value is "Y".
+
+                        if (field.Value.TryGetProperty("Header Field", out _))
+                        {
+                            _ = results.AppendLine(fieldName);
+                        }
+                    }
+                }
+                {
+                    // Datatypes that have Data Type Indicators.
+
+                    JsonElement records = jsonDocument.RootElement.GetProperty("Adif").GetProperty("DataTypes").GetProperty("Records");
+
+                    foreach (JsonProperty dataType in records.EnumerateObject())
+                    {
+                        string dataTypeName = dataType.Name;
+
+                        // If there is no Data Type Indicator, the item with the name (key) "Data Type Indicator" is omitted,
+                        // so TryGetProperty is needed before fetching the value for the name (key) "Data Type Indicator".
+
+                        if (dataType.Value.TryGetProperty("Data Type Indicator", out JsonElement dataTypeIndicator))
+                        {
+                            _ = results.AppendLine($"{dataTypeName} {dataTypeIndicator.GetString()}");
+                        }
+                    }
+                }
+
+                string compareLinesResult = results.ToString().CompareLines(expectedResults);
+
+                if (compareLinesResult.Length != 0)
+                {
+                    throw new AdifException($"Validation using JsonDocument failed: {compareLinesResult}");
+                }
+            }
+
+            {
+                ///////////////////////////
+                // Validate using JsonNode.
+                ///////////////////////////
+
+                JsonNode jsonNode = JsonSerializer.Deserialize<JsonNode>(json);
+
+                results.Clear();
+
+                {
+                    // Structure / Ensure Headers are correct in DataTypes, one Enumeration, and Fields.
+
+                    static string HeaderToString(JsonArray header)
+                    {
+                        StringBuilder listString = new(512);
+
+                        foreach (string value in header.Select(v => (string)v))
+                        {
+                            if (listString.Length != 0)
+                            {
+                                _ = listString.Append(", ");
+                            }
+                            _ = listString.Append(value);
+                        }
+                        return listString.ToString();
+                    }
+
+                    _ = results
+                        .AppendLine(HeaderToString(jsonNode.Root["Adif"]["DataTypes"]["Header"].AsArray()))
+                        .AppendLine(HeaderToString(jsonNode.Root["Adif"]["Enumerations"]["ARRL_Section"]["Header"].AsArray()))
+                        .AppendLine(HeaderToString(jsonNode.Root["Adif"]["Fields"]["Header"].AsArray()));
+                }
+                {
+                    // Enumerations / ARRL_Sect
+
+                    string arrlAkSectionName = jsonNode.Root["Adif"]["Enumerations"]["ARRL_Section"]["Records"]["AK"]["Section Name"].ToString();
+
+                    _ = results.AppendLine(arrlAkSectionName);
+                }
+                {
+                    // Primary Administrative Subdivision / Romania / BN
+                    // The object names for Primary Administrative Subdivision are in the form code.dxcc, so the name is BN.275
+
+                    string romaniaPasBn = jsonNode.Root["Adif"]["Enumerations"]["Primary_Administrative_Subdivision"]["Records"]["BN.275"]["Primary Administrative Subdivision"].ToString();
+
+                    _ = results.AppendLine(romaniaPasBn);
+                }
+                {
+                    // Header fields.
+
+                    JsonObject records = (JsonObject)jsonNode.Root["Adif"]["Fields"]["Records"];
+
+                    foreach (KeyValuePair<string, JsonNode> field in records)
+                    {
+                        string fieldName = field.Key;
+
+                        // If it is not a header field, the item with the name (key) "Header Field" is omitted,
+                        // so a null check is needed rather than fetching the field and checking if its value is "Y".
+
+                        if (field.Value["Header Field"] != null)
+                        {
+                            _ = results.AppendLine(fieldName);
+                        }
+                    }
+                }
+                {
+                    // Datatypes that have Data Type Indicators.
+
+                    JsonObject records = (JsonObject)jsonNode.Root["Adif"]["DataTypes"]["Records"];
+
+                    foreach (KeyValuePair<string, JsonNode> dataType in records)
+                    {
+                        string dataTypeName = dataType.Key;
+
+                        // If there is no Data Type Indicator, the item with the name (key) "Data Type Indicator" is omitted,
+                        // so a null check is needed before fetching the value for the name (key) "Data Type Indicator".
+
+                        string dataTypeIndicator = (string)dataType.Value["Data Type Indicator"];
+
+                        if (dataTypeIndicator != null)
+                        {
+                            _ = results.AppendLine($"{dataTypeName} {dataTypeIndicator}");
+                        }
+                    }
+                }
+
+                string compareLinesResult = results.ToString().CompareLines(expectedResults);
+
+                if (compareLinesResult.Length != 0)
+                {
+                    throw new AdifException($"Validation using JsonNode failed: {compareLinesResult}");
+                }
+            }
+        }
+
 
         /**
          * <summary>
@@ -662,40 +1120,39 @@ namespace AdifExportFilesCreator
         private static XmlDocument LoadAdifSpecification(string adifDocPath)
         {            
             string tempDocPath = Path.GetTempFileName();
-            XmlDocument xmlDocIn = new XmlDocument();
+            XmlDocument xmlDocIn = new();
 
             try
             {
                 xmlDocIn.PreserveWhitespace = true;
 
-                using (StreamReader htmlDocInStream = new StreamReader(adifDocPath, Common.Windows1252Encoding))
+                using (StreamReader htmlDocInStream = new(adifDocPath, Common.Windows1252Encoding))
                 {
-                    using (StreamWriter tempDocStream = new StreamWriter(tempDocPath, false, Common.Windows1252Encoding))
+                    using StreamWriter tempDocStream = new(tempDocPath, false, Common.Windows1252Encoding);
+
+                    //while (!htmlDocInStream.ReadLine().Contains("<html"));      // Skip <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+
+                    //tempDocStream.WriteLine("<?xml version=\"1.0\" encoding=\"windows-1252\" ?>");
+                    //tempDocStream.WriteLine("<html>");
+
+                    //while (!htmlDocInStream.EndOfStream)
+                    //{
+                    //    tempDocStream.WriteLine(htmlDocInStream.ReadLine().Replace("&nbsp;", " "));  // The character entity &nbsp; is not declared by default in XML.                            
+                    //}
+
+                    // The following is a revised version of the above that uses an internal DTD to replace &nbsp; with
+                    // a space instead of replacing them in the code here.  Both methods work, but this new one feels
+                    // less of a "hack".
+
+                    while (!htmlDocInStream.ReadLine().Contains("<html")) { };      // Skip <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+
+                    tempDocStream.WriteLine("<?xml version=\"1.0\" encoding=\"windows-1252\" ?>");
+                    tempDocStream.WriteLine("<!DOCTYPE html [ <!ENTITY nbsp \" \"> ]>");
+                    tempDocStream.WriteLine("<html>");
+
+                    while (!htmlDocInStream.EndOfStream)
                     {
-                        //while (!htmlDocInStream.ReadLine().Contains("<html"));      // Skip <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
-
-                        //tempDocStream.WriteLine("<?xml version=\"1.0\" encoding=\"windows-1252\" ?>");
-                        //tempDocStream.WriteLine("<html>");
-
-                        //while (!htmlDocInStream.EndOfStream)
-                        //{
-                        //    tempDocStream.WriteLine(htmlDocInStream.ReadLine().Replace("&nbsp;", " "));  // The character entity &nbsp; is not declared by default in XML.                            
-                        //}
-
-                        // The following is a revised version of the above that uses an internal DTD to replace &nbsp; with
-                        // a space instead of replacing them in the code here.  Both methods work, but this new one feels
-                        // less of a "hack".
-
-                        while (!htmlDocInStream.ReadLine().Contains("<html")) { };      // Skip <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
-
-                        tempDocStream.WriteLine("<?xml version=\"1.0\" encoding=\"windows-1252\" ?>");
-                        tempDocStream.WriteLine("<!DOCTYPE html [ <!ENTITY nbsp \" \"> ]>");
-                        tempDocStream.WriteLine("<html>");
-
-                        while (!htmlDocInStream.EndOfStream)
-                        {
-                            tempDocStream.WriteLine(htmlDocInStream.ReadLine());
-                        }
+                        tempDocStream.WriteLine(htmlDocInStream.ReadLine());
                     }
                 }
 
@@ -703,10 +1160,8 @@ namespace AdifExportFilesCreator
                 // deal with the Windows-1252 encoding.  To prevent this, it's necessary to set up a StreamReader with
                 // a Windows-1252 encoding object and use that with xmlDocIn.Load
 
-                using (StreamReader sw = new StreamReader(tempDocPath, Common.Windows1252Encoding))
-                {
-                    xmlDocIn.Load(sw);
-                }
+                using StreamReader sw = new(tempDocPath, Common.Windows1252Encoding);
+                xmlDocIn.Load(sw);
             }
             finally
             {
@@ -714,7 +1169,11 @@ namespace AdifExportFilesCreator
                 {
                     File.Delete(tempDocPath);
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    Logger.Log($"Error: Failed to delete {tempDocPath}");
+                    Logger.Log(ex);
+                }
             }
             return xmlDocIn;
         }
@@ -746,6 +1205,34 @@ namespace AdifExportFilesCreator
                 writer.WriteField(AdifStatus);
                 writer.WriteRecord();
             }
+        }
+
+        /**
+         * <summary>
+         *   Creates a new <see cref="AdifExportObjects.Export"/> object and initializes its <see cref="AdifExportObjects.Export.Adif"/> property
+         *   to an Adif object, which in turn has its <see cref="AdifExportObjects.Adif.Version"/>, <see cref="AdifExportObjects.Adif.Status"/>
+         *   and <see cref="AdifExportObjects.Adif.Date"/>properties initialized.
+         * </summary>
+         * 
+         * <param name="adifVersion">The ADIF Specification's version in the form i.j.k</param>
+         * <param name="adifStatus">The ADIF Specification's status of "Draft", "Proposed", or "Released".</param>
+         * <param name="adifDate">The ADIF Specification's release date.</param>
+         */
+        public static AdifExportObjects.Export CreateExportObject(
+            string adifVersion,
+            string adifStatus,
+            DateTime adifDate)
+        {
+            return new()
+            {
+                Adif = new()
+                {
+                    Status = adifStatus,
+                    Version = adifVersion,
+                    Date = adifDate,
+                    Created = DateTime.UtcNow.Truncate(TimeSpan.TicksPerSecond)
+                }
+            };
         }
     }
 }

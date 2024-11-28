@@ -7,8 +7,9 @@ in these formats:
 - TSV (.tsv)
 - Microsoft Excel (.xlsx)
 - OpenOffice Calc (.ods)
+- JSON (.json)
 
-The generated files for each ADIF version are then provided on the website in a ZIP file (created outside this applicaiton).
+The generated files for each ADIF version are then provided on the website in a ZIP file (created outside this application), excluding the JSON files because they are experimental.
  
 ## Projects
 | Name  | Purpose |
@@ -20,7 +21,7 @@ The generated files for each ADIF version are then provided on the website in a 
 ## Software Requirements
 - Microsoft .NET
 - Microsoft Excel (needed for generating .xlsx and .ods files)
-- Microsoft Visual Studio 2022
+- Microsoft Visual Studio 2022 Community Edition
 
 ## Limitations
 - The application version is kept in step with the ADIF Specification versions.  This is because of the potential need to add code to support new features in the ADIF Specification.

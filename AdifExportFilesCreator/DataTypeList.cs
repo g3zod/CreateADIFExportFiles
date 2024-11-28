@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Xml;
+using System.Text.Json;
+using AdifExportFilesCreator.AdifExportObjects;
 
 namespace AdifExportFilesCreator
 {
@@ -14,6 +16,10 @@ namespace AdifExportFilesCreator
      *   <br/>
      *   The files comprise CSV (.csv), TSV (.tsv), XML (.xml), Microsoft Excel (.xlsx), and Apache OpenSource Calc (.ods) files.
      * </summary>
+     * 
+     * <remarks>
+     *   Also JSON (.json) is now created but for the time being is not officially included in ADIF releases.
+     * </remarks>
      */
     internal class DataTypeList
     {
@@ -22,9 +28,9 @@ namespace AdifExportFilesCreator
         // Don't know why 'disable layout' is causing IDE0079 - elsewhere it doesn't - so suppress it.
 #pragma warning disable IDE0079         // Remove unnecessary suppression
 #pragma warning disable layout, IDE0055 // Layout, Fix formatting
-        private readonly List<string>               fieldNames      = new List<string>              (MaxFields);
-        private readonly List<string[]>             fields          = new List<string[]>            (MaxFields);
-        private readonly Dictionary<string, int>    fieldMap        = new Dictionary<string, int>   (MaxFields);
+        private readonly List<string>               fieldNames      = new(MaxFields);
+        private readonly List<string[]>             fields          = new(MaxFields);
+        private readonly Dictionary<string, int>    fieldMap        = new(MaxFields);
         private string[]                            htmlFieldNames  = null;
 #pragma warning restore layout, IDE0055 // Layout, Fix formatting
 
@@ -116,7 +122,7 @@ namespace AdifExportFilesCreator
 
                         if (bracketPosn >= 0)
                         {
-                            fieldName = fieldName.Substring(0, bracketPosn-1);
+                            fieldName = fieldName[..(bracketPosn - 1)];
                         }
 
                         htmlFieldNames[cellIndex] = fieldName;
@@ -148,7 +154,7 @@ namespace AdifExportFilesCreator
                 }
                 else
                 {
-                    StringBuilder comments = new StringBuilder(256);
+                    StringBuilder comments = new(256);
                     string[] values = new string[fieldNames.Count];
                     bool importOnly = false;
                     XmlNodeList nodes = row.GetElementsByTagName("td");
@@ -163,7 +169,7 @@ namespace AdifExportFilesCreator
                         {
                             const string importOnlyText = " import-only";
 
-                            if (value.ToLower().ToLower().Contains(importOnlyText))
+                            if (value.Contains(importOnlyText, StringComparison.OrdinalIgnoreCase))
                             {
                                 importOnly = true;
                                 value = value.Replace(importOnlyText, string.Empty);
@@ -185,7 +191,7 @@ namespace AdifExportFilesCreator
                             {
                                 string sValue = minMaxNode.InnerText.Trim();
 
-                                if (sValue.IndexOf('.') >= 0 ||
+                                if (sValue.Contains('.') ||
                                     !int.TryParse(sValue, out int iValue))
                                 {
                                     throw new Exception($"The <span title=\"GreaterThan\"> tag contains {sValue} but only integer values are allowed");
@@ -211,7 +217,7 @@ namespace AdifExportFilesCreator
                         values[fieldMap[htmlFieldNames[cellIndex]]] = value;
                     }
                     values[importOnlyColumn] = importOnly ? "Import-only" : string.Empty;
-                    values[commentsColumn] = comments.ToString().ToLower() == "import-only" ? string.Empty : comments.ToString();
+                    values[commentsColumn] = comments.ToString().Equals("import-only", StringComparison.OrdinalIgnoreCase) ? string.Empty : comments.ToString();
 
                     values[minimumValueColumn] = minimumValue;
                     values[maximumValueColumn] = maximumValue;
@@ -241,6 +247,15 @@ namespace AdifExportFilesCreator
                 specification.AdifDate,
                 true,
                 true);
+            ExportToJson(
+                name,
+                orderedHeaderRecord,
+                orderedValueRecords,
+                specification.AdifVersion,
+                specification.AdifStatus,
+                specification.AdifDate,
+                true,
+                true);
         }
 
         private static void ExportToCsvTsvExcel(
@@ -253,31 +268,29 @@ namespace AdifExportFilesCreator
             const string baseFileName = "datatypes";
 
             using (AdifReleaseLib.CsvWriter csvWriter =
-                new AdifReleaseLib.CsvWriter(Path.Combine(specification.ExportsCsvPath, $"{baseFileName}.csv")))
+                new(Path.Combine(specification.ExportsCsvPath, $"{baseFileName}.csv")))
             {
                 specification.ExportToTableWriter(csvWriter, headerRecord, valueRecords);
             }
 
             using (AdifReleaseLib.TsvWriter tsvWriter =
-                new AdifReleaseLib.TsvWriter(Path.Combine(specification.ExportsTsvPath, $"{baseFileName}.tsv")))
+                new(Path.Combine(specification.ExportsTsvPath, $"{baseFileName}.tsv")))
             {
                 specification.ExportToTableWriter(tsvWriter, headerRecord, valueRecords);
             }
 
             string content = "Data Types";
 
-            using (AdifReleaseLib.ExcelWriter excelWriter =
-                new AdifReleaseLib.ExcelWriter(
+            using ExcelWriter excelWriter =
+                new(
                     Path.Combine(specification.ExportsXlsxPath, $"{baseFileName}.xlsx"),
                     Path.Combine(specification.ExportsOdsPath, $"{baseFileName}.ods"),
                     specification.AdifVersion,
                     specification.AdifStatus,
                     specification.GetTitle(content),
-                    specification.Author,
-                    content))
-            {
-                specification.ExportToTableWriter(excelWriter, headerRecord, valueRecords);
-            }
+                    Specification.Author,
+                    content);
+            specification.ExportToTableWriter(excelWriter, headerRecord, valueRecords);
         }
 
         private static void ExportToXml(
@@ -341,6 +354,113 @@ namespace AdifExportFilesCreator
             AdifReleaseLib.Common.SetFileTimesToNow(filePath);
         }
 
+        private static void ExportToJson(
+#pragma warning disable IDE0060
+            string resourceName,
+#pragma warning restore IDE0060
+            List<string> headerRecord,
+            List<string[]> valueRecords,
+            string adifVersion,
+            string adifStatus,
+            DateTime adifDate,
+#pragma warning disable IDE0060 // Remove unused parameter
+            bool addHeaderNamesToRecords,
+#pragma warning restore IDE0060 // Remove unused parameter
+            bool addEmptyValues)
+        {
+            Export export = Specification.CreateExportObject(
+                adifVersion,
+                adifStatus,
+                adifDate);
+
+            Adif adif = export.Adif;
+
+            {
+                DataTypes dataTypes = new()
+                {
+                    Header = [.. headerRecord]
+                };
+                adif.DataTypes = dataTypes;
+
+                if (Specification.ExportJsonRecordsAlt)
+                {
+                    dataTypes.RecordsAlt = [];
+
+                    foreach (string[] valueRecord in valueRecords)
+                    {
+                        int i = 0;
+
+                        Record record = [];
+
+                        foreach (string value in valueRecord)
+                        {
+                            if ((!addEmptyValues) || value.Length > 0)
+                            {
+                                switch (headerRecord[i].ToUpper())
+                                {
+                                    case "DELETED":
+                                    case "IMPORT-ONLY":
+                                        record.Add(headerRecord[i], Specification.JsonTrueAsString);
+                                        break;
+
+                                    default:
+                                        record.Add(headerRecord[i], value);
+                                        break;
+                                }
+                            }
+                            i++;
+                        }
+                        dataTypes.RecordsAlt.Add(record);
+                    }
+                }
+
+                if (Specification.ExportJsonRecords)
+                {
+                    dataTypes.Records = [];
+
+                    string dataTypeName = string.Empty;
+
+                    foreach (string[] valueRecord in valueRecords)
+                    {
+                        int i = 0;
+
+                        Record record = [];
+
+                        foreach (string value in valueRecord)
+                        {
+                            if (i == 0)
+                            {
+                                dataTypeName = value;
+                            }
+
+                            if ((!addEmptyValues) || value.Length > 0)
+                            {
+                                switch (headerRecord[i].ToUpper())
+                                {
+                                    case "DELETED":
+                                    case "IMPORT-ONLY":
+                                        record.Add(headerRecord[i], Specification.JsonTrueAsString);
+                                        break;
+
+                                    default:
+                                        record.Add(headerRecord[i], value);
+                                        break;
+                                }
+                            }
+                            i++;
+                        }
+                        dataTypes.Records.Add(dataTypeName, record);
+                    }
+                }
+                specification.AllJsonExport.Adif.DataTypes = dataTypes;
+            }
+
+            string filePath = Path.Combine(specification.ExportsJsonPath, "datatypes.json");
+            string json = JsonSerializer.Serialize(export, typeof(Export), Specification.JsonSerializerOptions);
+
+            File.WriteAllText(filePath, json, Encoding.UTF8);
+        }
+
         private void OrderColumnsForExport(
             string[] columnNamesForFile,
             out List<string> newHeaderRecord,
@@ -376,14 +496,14 @@ namespace AdifExportFilesCreator
                 }
             }
 
-            List<string> orderedHeaderRecord = new List<string>(20);
+            List<string> orderedHeaderRecord = new(20);
 
             for (int index = 0; index < columnMapIndexes.Length && columnMapIndexes[index] >= 0; index++)
             {
                 orderedHeaderRecord.Add(fieldNames[columnMapIndexes[index]]);
             }
 
-            List<string[]> orderedValueRecords = new List<string[]>(fields.Count);
+            List<string[]> orderedValueRecords = new(fields.Count);
 
             foreach (string[] valueRecord in fields)
             {
@@ -410,7 +530,7 @@ namespace AdifExportFilesCreator
                 "Minimum Value",
                 "Maximum Value",
                 "Import-only",
-                "Comments").Split(new char[] { ',' });
+                "Comments").Split([',']);
         }
 
         /**

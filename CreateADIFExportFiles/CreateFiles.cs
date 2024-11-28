@@ -13,8 +13,12 @@ namespace CreateADIFExportFiles
      *   Pprovides the user interface for the CreateADIFExportFiles application that
      *   exports tables from an ADIF Specification.<br/>
      *   <br/>
-     *   The file formats are CSV (.csv), TSV (.tsv), XML (.xml). Excel (.xlsx) and OpenSource Calc (.ods).
+     *   The file formats are CSV (.csv), TSV (.tsv), XML (.xml). MicrosoftExcel (.xlsx) and Apache OpenSource Calc (.ods).
      * </summary>
+     * 
+     * <remarks>
+     *   Also JSON (.json) is now created but for the time being is not officially included in ADIF releases.
+     * </remarks>
      */
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility", Justification = "This is the Windows UI")]
     public partial class CreateFiles : Form
@@ -296,8 +300,8 @@ Error details: {(exc.InnerException != null ? exc.InnerException.Message : "None
         private void EnableControls(bool enable)
         {
             LblSpecificationFile.Enabled =
-            TxtSpecificationFile.Enabled =
-            BtnChooseFile.Enabled = enable;
+                TxtSpecificationFile.Enabled =
+                BtnChooseFile.Enabled = enable;
 
             if (enable)
             {
@@ -314,13 +318,13 @@ Error details: {(exc.InnerException != null ? exc.InnerException.Message : "None
          *   Shows a Message Box contaiing details of an error.
          * </summary>
          */
-        private void ShowError(string message)
+        private static void ShowError(string message)
         {
             _ = MessageBox.Show(
-                message,
-                "Error Exporting ADIF Specification Files",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Exclamation);
+                    message,
+                    "Error Exporting ADIF Specification Files",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Exclamation);
         }
 
         /**

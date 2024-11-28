@@ -5,6 +5,8 @@ using System.IO;
 using System.Text;
 using System.Xml;
 using System.Text.RegularExpressions;
+using AdifExportFilesCreator.AdifExportObjects;
+using System.Text.Json;
 
 namespace AdifExportFilesCreator
 {
@@ -13,17 +15,21 @@ namespace AdifExportFilesCreator
      *   xports the fields in the ADIF Specification XHTML file as associated files for
      *   including in the released files.<br/>
      *   <br/>
-     *   The files comprise CSV (.csv), TSV (.tsv), XML (.xml), Microsoft Excel (.xlsx), and OpenSource Calc (.ods) files.
+     *   The files comprise CSV (.csv), TSV (.tsv), XML (.xml), Microsoft Excel (.xlsx), and Apache OpenSource Calc (.ods) files.
      * </summary>
+     * 
+     * <remarks>
+     *   Also JSON (.json) is now created but for the time being is not officially included in ADIF releases.
+     * </remarks>
      */
-    internal class FieldList
+    internal partial class FieldList
     {
         private const int MaxFields = 200;
 #pragma warning disable format
-        private readonly List<string>               fieldNames      = new List<string>              (MaxFields);
-        private readonly List<string[]>             fields          = new List<string[]>            (MaxFields);
-        private readonly Dictionary<string, int>    fieldMap        = new Dictionary<string, int>   (MaxFields);
-        private string[]                            htmlFieldNames  = null;
+        private readonly List<string>               fieldNames      = new(MaxFields);
+        private readonly List<string[]>             fields          = new(MaxFields);
+        private readonly Dictionary<string, int>    fieldMap        = new(MaxFields);
+        private string[]                            htmlFieldNames;
 #pragma warning restore format
         private int AddField(string fieldName)
         {
@@ -144,7 +150,7 @@ namespace AdifExportFilesCreator
                 }
                 else
                 {
-                    StringBuilder comments = new StringBuilder(256);
+                    StringBuilder comments = new(256);
                     string[] values = new string[fieldNames.Count];
                     bool importOnly = false;
                     XmlNodeList nodes = row.GetElementsByTagName("td");
@@ -172,7 +178,7 @@ namespace AdifExportFilesCreator
                             {
                                 string sValue = minMaxNode.InnerText.Trim();
 
-                                if (sValue.IndexOf('.') >= 0 ||
+                                if (sValue.Contains('.') ||
                                     !int.TryParse(sValue, out int iValue))
                                 {
                                     throw new Exception(string.Format(
@@ -197,7 +203,7 @@ namespace AdifExportFilesCreator
                                 maximumValue = minMaxNode.InnerText.Trim();
                             }
 
-                            if (value.ToLower().StartsWith("import-only"))
+                            if (value.StartsWith("import-only", StringComparison.CurrentCultureIgnoreCase))
                             {
                                 importOnly = true;
                             }
@@ -223,7 +229,7 @@ namespace AdifExportFilesCreator
                             {
                                 value = ParseComplexEnumerationName("(Submode, function of MODE field's value)");
                             }
-                            else if (value.IndexOf(' ') >= 0)
+                            else if (value.Contains(' '))
                             {
                                 value = ReplaceSpacesInEnumerationName(value);
                             }
@@ -243,15 +249,15 @@ namespace AdifExportFilesCreator
                         }
                         values[fieldMap[htmlFieldNames[cellIndex]]] = value;
                     }
-#pragma warning disable format
+#pragma warning disable format, IDE0055
                     values[importOnlyColumn]    = importOnly ? "Import-only" : string.Empty;
-                    values[commentsColumn]      = comments.ToString().ToLower() == "import-only" ? string.Empty : comments.ToString();
+                    values[commentsColumn]      = comments.ToString().Equals("import-only", StringComparison.OrdinalIgnoreCase) ? string.Empty : comments.ToString();
 
                     values[headerFieldColumn]   = isHeaderField ? "Y" : string.Empty;
 
                     values[minimumValueColumn]  = minimumValue;
                     values[maximumValueColumn]  = maximumValue;
-#pragma warning restore format
+#pragma warning restore format, IDE0055
 
                     fields.Add(values);
                 }
@@ -278,6 +284,15 @@ namespace AdifExportFilesCreator
                 specification.AdifDate,
                 true,
                 true);
+            ExportToJson(
+                name,
+                orderedHeaderRecord,
+                orderedValueRecords,
+                specification.AdifVersion,
+                specification.AdifStatus,
+                specification.AdifDate,
+                true,
+                true);
         }
 
         private static void ExportToCsvTsvExcel(
@@ -290,31 +305,29 @@ namespace AdifExportFilesCreator
             const string baseFileName = "fields";
 
             using (AdifReleaseLib.CsvWriter csvWriter =
-                new AdifReleaseLib.CsvWriter(Path.Combine(specification.ExportsCsvPath, $"{baseFileName}.csv")))
+                new(Path.Combine(specification.ExportsCsvPath, $"{baseFileName}.csv")))
             {
                 specification.ExportToTableWriter(csvWriter, headerRecord, valueRecords);
             }
 
             using (AdifReleaseLib.TsvWriter tsvWriter =
-                new AdifReleaseLib.TsvWriter(Path.Combine(specification.ExportsTsvPath, $"{baseFileName}.tsv")))
+                new(Path.Combine(specification.ExportsTsvPath, $"{baseFileName}.tsv")))
             {
                 specification.ExportToTableWriter(tsvWriter, headerRecord, valueRecords);
             }
 
             string content = "Fields";
 
-            using (ExcelWriter excelWriter =
-                new ExcelWriter(
+            using ExcelWriter excelWriter =
+                new(
                     Path.Combine(specification.ExportsXlsxPath, $"{baseFileName}.xlsx"),
                     Path.Combine(specification.ExportsOdsPath, $"{baseFileName}.ods"),
                     specification.AdifVersion,
                     specification.AdifStatus,
                     specification.GetTitle(content),
-                    specification.Author,
-                    content))
-            {
-                specification.ExportToTableWriter(excelWriter, headerRecord, valueRecords);
-            }
+                    Specification.Author,
+                    content);
+            specification.ExportToTableWriter(excelWriter, headerRecord, valueRecords);
         }
 
         private static void ExportToXml(
@@ -358,18 +371,11 @@ namespace AdifExportFilesCreator
                         }
                         if (value.Length > 0)
                         {
-                            switch (headerRecord[i])
+                            valueEl.InnerText = headerRecord[i] switch
                             {
-                                case "Deleted":
-                                case "Import-only":
-                                case "Header Field":
-                                    valueEl.InnerText = XmlConvert.ToString(true);
-                                    break;
-
-                                default:
-                                    valueEl.InnerText = value;
-                                    break;
-                            }
+                                "Deleted" or "Import-only" or "Header Field" => XmlConvert.ToString(true),
+                                _ => value,
+                            };
                         }
                     }
                     i++;
@@ -379,6 +385,118 @@ namespace AdifExportFilesCreator
 
             xmlDoc.Save(fileName);
             AdifReleaseLib.Common.SetFileTimesToNow(fileName);
+        }
+
+        private static void ExportToJson(
+#pragma warning disable IDE0060
+            string name,
+#pragma warning restore IDE0060
+            List<string> headerRecord,
+            List<string[]> valueRecords,
+            string adifVersion,
+            string adifStatus,
+            DateTime adifDate,
+#pragma warning disable IDE0060 // Remove unused parameter
+            bool addHeaderNamesToRecords,
+            bool addEmptyValues)
+#pragma warning restore IDE0060 // Remove unused parameter
+        {
+            Export export = Specification.CreateExportObject(
+                adifVersion,
+                adifStatus,
+                adifDate);
+
+            Adif adif = export.Adif;
+
+            {
+                Fields fields = new()
+                {
+                    Header = [.. headerRecord]
+                };
+                adif.Fields = fields;
+
+                if (Specification.ExportJsonRecordsAlt)
+                {
+                    fields.RecordAlt = [];
+
+                    foreach (string[] valueRecord in valueRecords)
+                    {
+                        int i = 0;
+
+                        Record record = [];
+
+                        foreach (string value in valueRecord)
+                        {
+                            if ((!addEmptyValues) || value.Length > 0)
+                            {
+                                switch (headerRecord[i].ToUpper())
+                                {
+                                    case "DELETED":
+                                    case "IMPORT-ONLY":
+                                    case "HEADER FIELD":
+                                        record.Add(headerRecord[i], Specification.JsonTrueAsString);
+                                        break;
+
+                                    default:
+                                        record.Add(headerRecord[i], value);
+                                        break;
+                                }
+                            }
+                            i++;
+                        }
+                        fields.RecordAlt.Add(record);
+                    }
+                }
+
+                if (Specification.ExportJsonRecords)
+                {
+                    fields.Records = [];
+
+                    string fieldName = string.Empty;
+
+                    foreach (string[] valueRecord in valueRecords)
+                    {
+                        int i = 0;
+
+                        Record record = [];
+
+                        foreach (string value in valueRecord)
+                        {
+                            if (i == 0)
+                            {
+                                fieldName = value;
+                            }
+
+                            if ((!addEmptyValues) || value.Length > 0)
+                            {
+                                switch (headerRecord[i].ToUpper())
+                                {
+                                    case "DELETED":
+                                    case "IMPORT-ONLY":
+                                    case "HEADER FIELD":
+                                        record.Add(headerRecord[i], Specification.JsonTrueAsString);
+                                        break;
+
+                                    default:
+                                        record.Add(headerRecord[i], value);
+                                        break;
+                                }
+                            }
+                            i++;
+                        }
+                        fields.Records.Add(fieldName, record);
+                    }
+                }
+                specification.AllJsonExport.Adif.Fields = fields;
+            }
+
+            string filePath = Path.Combine(specification.ExportsJsonPath, "fields.json");
+
+            string json = JsonSerializer.Serialize(export, typeof(Export), Specification.JsonSerializerOptions);
+
+            File.WriteAllText(filePath, json, Encoding.UTF8);
+
+            AdifReleaseLib.Common.SetFileTimesToNow(filePath);
         }
 
         private void OrderColumnsForExport(
@@ -416,14 +534,14 @@ namespace AdifExportFilesCreator
                 }
             }
 
-            List<string> orderedHeaderRecord = new List<string>(20);
+            List<string> orderedHeaderRecord = new(20);
 
             for (int index = 0; index < columnMapIndexes.Length && columnMapIndexes[index] >= 0; index++)
             {
                 orderedHeaderRecord.Add(fieldNames[columnMapIndexes[index]]);
             }
 
-            List<string[]> orderedValueRecords = new List<string[]>(fields.Count);
+            List<string[]> orderedValueRecords = new(fields.Count);
 
             foreach (string[] valueRecord in fields)
             {
@@ -451,7 +569,7 @@ namespace AdifExportFilesCreator
                 "Minimum Value",
                 "Maximum Value",
                 "Import-only",
-                "Comments").Split(new char[] { ',' });
+                "Comments").Split([',']);
         }
 
         /**
@@ -463,19 +581,18 @@ namespace AdifExportFilesCreator
          * 
          * <returns>The enumeration name with spaces replaced by underscores.</returns>
          */
-        private string ReplaceSpacesInEnumerationName(string name) => name.Replace(' ', '_');
+        private static string ReplaceSpacesInEnumerationName(string name) => name.Replace(' ', '_');
 
-        private static readonly Regex regex = new Regex(
-                @"\(([^,]*), function of ([\w ]*) field's value\)");
+        private static readonly Regex FunctionOfRegex = FunctionOfPartialRegex();
 
-        private string ParseComplexEnumerationName(string complexEnumerationName)
+        private static string ParseComplexEnumerationName(string complexEnumerationName)
         {
             // Some enumerations form a set dependent on the value of another field and have the form:
             //      (x x x, function of y y y field's value)
             // E.g. (Primary Administrative Subdivision, function of MY_DXCC field's value)
 
             string enumerationName = string.Empty;
-            Match match = regex.Match(complexEnumerationName);
+            Match match = FunctionOfRegex.Match(complexEnumerationName);
             
             if (match.Success)
             {
@@ -516,5 +633,8 @@ namespace AdifExportFilesCreator
         {
             // No post-export actions required.
         }
+
+        [GeneratedRegex(@"\(([^,]*), function of ([\w ]*) field's value\)")]
+        private static partial Regex FunctionOfPartialRegex();
     }
 }

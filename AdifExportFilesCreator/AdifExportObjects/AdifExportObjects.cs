@@ -31,6 +31,7 @@ namespace AdifExportFilesCreator
             public string Version { get; set; }
             public string Status { get; set; }
             public DateTime Date { get; set; }
+            public DateTime Created { get; set; }
             public DataTypes DataTypes { get; set; }
             public Enumerations Enumerations { get; set; }
             public Fields Fields { get; set; }
@@ -45,7 +46,7 @@ namespace AdifExportFilesCreator
         {
             public Header Header { get; set; }
             public Records Records { get; set; }
-            public Records2 Records2 { get; set; }
+            public RecordsAlt RecordsAlt { get; set; }
         }
 
         /**
@@ -64,7 +65,7 @@ namespace AdifExportFilesCreator
         {
             public Header Header { get; set; }
             public Records Records { get; set; }
-            public Records2 Records2 { get; set; }
+            public RecordsAlt RecordAlt { get; set; }
         }
 
         /**
@@ -76,7 +77,7 @@ namespace AdifExportFilesCreator
         {
             public Header Header { get; set; }
             public Records Records { get; set; }
-            public Records2 Records2 { get; set; }
+            public RecordsAlt RecordsAlt { get; set; }
         }
 
         /**
@@ -91,14 +92,14 @@ namespace AdifExportFilesCreator
          *   This represents an un-named list of records.
          * </summary>
          */
-        public class Records : List<Record> { }
+        public class RecordsAlt : List<Record> { }
 
         /**
          * <summary>
          *   This represents a named list of records.
          * </summary>
          */
-        public class Records2 : Dictionary<string, Record> { }
+        public class Records : Dictionary<string, Record> { }
 
         /**
          * <summary>
