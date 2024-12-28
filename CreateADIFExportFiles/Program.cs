@@ -23,7 +23,7 @@ namespace CreateADIFExportFiles
         {
             // A mutex is used to prevent more than one instance of the program running.
 
-            Mutex mutex = new Mutex(
+            Mutex mutex = new(
                 true,
                 $"adif.org.uk.{Application.ProductName}",
                 out bool created);
