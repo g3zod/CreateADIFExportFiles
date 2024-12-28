@@ -26,6 +26,8 @@ namespace AdifExportFilesCreator
         private const int MaxFields = 20;
         private static readonly char[] commaSplitChar = [','];
 
+        private const string ImportOnlyLc = "import-only";
+
 #pragma warning disable format, IDE0055
         private const string
             PrimaryAdministrativeSubdivisionName        = "Primary_Administrative_Subdivision",
@@ -318,7 +320,7 @@ namespace AdifExportFilesCreator
                             Common.ReplaceWhiteSpace(nodes[cellIndex].InnerText).Trim() :
                             string.Empty;
 
-                        if (value.Contains("import-only", StringComparison.OrdinalIgnoreCase))
+                        if (value.Contains(ImportOnlyLc, StringComparison.OrdinalIgnoreCase))
                         {
                             importOnly = true;
                         }
@@ -328,22 +330,7 @@ namespace AdifExportFilesCreator
                             cellIndex == qslViaDescriptionColumn ||
                             cellIndex == secondaryAdministrativeSubdivisionColumn)
                         {
-                            int bracketPosition = value.IndexOfAny(['(', '{', '[']);
-
-                            if (bracketPosition >= 0)
-                            {
-                                string newComment = value.Substring(bracketPosition + 1, value.Length - bracketPosition - 2);
-
-                                if (!comments.ToString().Contains(newComment, StringComparison.OrdinalIgnoreCase))
-                                {
-                                    if (comments.Length > 0)
-                                    {
-                                        _ = comments.Append("; ");
-                                    }
-                                    _ = comments.Append(newComment);
-                                }
-                                value = value[..bracketPosition].Trim();
-                            }
+                            value = ExtractValuesFromCell(value, out _, out _, out comments);
                         }
 
                         // Frequencies > 999 MHz in the Band enumeration contain thousands separators (','); remove these.
@@ -394,7 +381,7 @@ namespace AdifExportFilesCreator
                                     "y" or "deleted" => "Deleted",
                                     _ => throw new AdifException($"Unexpected value for 'Deleted' in enumeration '{enumerationName}': value='{value}'"),
                                 };
-                            }                            
+                            }
                         }
 
                         if (isPrimaryAdministrativeSubdivision &&
@@ -415,52 +402,25 @@ namespace AdifExportFilesCreator
                             //    primaryAdministrativeSubdivisionDeleted = "Deleted";
                             //}
 
-                            int posn = value.IndexOf(" - ");
+                            value = ExtractValuesFromCell(value, out bool deleted, out importOnly, out comments);
 
-                            if (posn > 0)
+                            if (deleted)
                             {
-                                if (value.Contains(" - for contacts made before"))
-                                {
-                                    primaryAdministrativeSubdivisionDeleted = "Deleted";
-                                }
-                                else if (value.Contains(" - for contacts made on or after"))
-                                {
-                                    // Okay
-                                }
-                                else if (value.Contains(" - referred to"))
-                                {
-                                    // Okay
-                                }
-                                else
-                                {
-                                    throw new Exception($"Unexpected comment string found in Primary Administrative Subdivision: value='{value}'");
-                                }
-
-                                if (comments.Length > 0)
-                                {
-                                    _ = comments.Append("; ");
-                                }
-                                _ = comments.Append(value.AsSpan(posn + 3));
-                                value = value[..posn];
+                                primaryAdministrativeSubdivisionDeleted = "Deleted";
                             }
-
-                            posn = value.IndexOf(" (");
-                            if (posn > 0)
-                            {
-                                if (comments.Length > 0)
-                                {
-                                    _ = comments.Append("; ");
-                                }
-                                _ = comments.Append(value.AsSpan(posn + 2, value.Length - posn - 3));
-                                value = value[..posn];
-                            }                            
                         }
                         values[fieldMap[htmlFieldNames[cellIndex]]] = value;
                         System.Diagnostics.Debug.Assert(value != null);
                     }
-                    values[enumerationNameColumn]   = enumerationName;
-                    values[importOnlyColumn]        = importOnly ? "Import-only" : string.Empty;
-                    values[commentsColumn]          = comments.ToString().Equals("import-only", StringComparison.OrdinalIgnoreCase) ? string.Empty : comments.ToString();
+
+                    if (comments.ToString().Contains(ImportOnlyLc, StringComparison.OrdinalIgnoreCase))
+                    {
+                        throw new AdifException($"Comments contains \"import-only\": \"{comments}\"");
+                    }
+
+                    values[enumerationNameColumn] = enumerationName;
+                    values[importOnlyColumn] =      importOnly ? "Import-only" : string.Empty;
+                    values[commentsColumn] =        comments.ToString();
 
                     if (isPrimaryAdministrativeSubdivision)
                     {
@@ -542,6 +502,194 @@ namespace AdifExportFilesCreator
             }
         }
 
+        /**
+         * <summary>
+         *   This takes the value of a Primary Adminstrative Subdivision cell and separates out these items:<br />
+         *   - The actual name part.<br />
+         *   - Whether or not it is Deleted.<br />
+         *   - Whether or not it is Import-only.<br />
+         *   - Comments.<br />
+         *   <br />
+         *   If there is more than one comment, they will be separated with "; ".
+         * </summary>
+         * 
+         * <remarks>
+         *   The code is relatively complex due to the inconsistent ways the items are specified in the Primary Administrative Subdivision cells.
+         * </remarks>
+         * 
+         * <param name="value">The value of the Primary Administrative Subdivision cell in the ADIF Specification.</param>
+         * <param name="deleted">Whether or not it is Deleted.</param>
+         * <param name="importOnly">Whether or not it is Import-only.</param>
+         * <param name="comments">A list of comments.</param>
+         * 
+         * <returns>The actual name part.</returns>
+         */
+        private static string ExtractValuesFromCell(
+            string value,
+            out bool deleted,
+            out bool importOnly,
+            out StringBuilder comments)
+        {
+            bool adjustedZabaykalskyKrajValue = false;
+
+            string
+                temp,  // Preserve the value argument's value in case it is needed for an error message.
+                newValue = string.Empty;
+
+            // Adjust some values found in ADIF 3.1.5 and earlier.
+
+            switch (value)
+            {
+                case "Distrito Federal (import-only replaced by CMX)":
+                    value = "Distrito Federal (import-only - replaced by CMX)";
+                    break;
+
+                case "Sakha (Yakut) Republic":
+                    value = "Republic of Sakha";
+                    break;
+
+                case "Zabaykalsky Kraj - referred to as Chita (Chitinskaya oblast) before 2008-03-01":
+                    value = "Zabaykalsky Kraj - referred to as Chita [Chitinskaya oblast] before 2008-03-01";
+                    adjustedZabaykalskyKrajValue = true;
+                    break;
+
+                case "Carbonia-Iglesias (import-only replaced by SU)":
+                    value = "Carbonia-Iglesias (import-only - replaced by SU)";
+                    break;
+
+                default:
+                    break;
+            }
+
+            temp = value;
+
+            List<string> commentList = new(8);
+
+            deleted = false;
+            importOnly = false;
+
+            while (true)
+            {
+                int
+                    startPosn = temp.IndexOf('('),
+                    endPosn;
+
+                if (startPosn >= 0)
+                {
+                    endPosn = temp.IndexOf(')');
+
+                    if (endPosn < 0)
+                    {
+                        throw new AdifException($"Enumeration value has mismatched parentheses: \"{value}\"");
+                    }
+
+                    {
+                        string commentValue = temp.Substring(startPosn + 1, endPosn - startPosn - 1).Trim();
+
+                        if (commentValue.StartsWith(ImportOnlyLc, StringComparison.OrdinalIgnoreCase))
+                        {
+                            importOnly = true;
+                            commentValue = commentValue[ImportOnlyLc.Length..].Trim();
+
+                            if (commentValue.StartsWith('-'))
+                            {
+                                commentValue = commentValue[1..].Trim();
+
+                                if (!value.Contains("replaced by", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    throw new AdifException($"Unexpected comment string found: value='{value}'");
+                                }
+                            }
+                        }
+                        if (commentValue.Length > 0)
+                        {
+                            commentList.Add(commentValue);
+                        }
+                    }
+                    if (newValue.Length == 0)
+                    {
+                        newValue = temp[..startPosn].TrimEnd();
+                    }
+                    temp = temp[(endPosn + 1)..].Trim();
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            if (newValue.Length == 0)
+            {
+                newValue = value;
+            }
+
+            {
+                // This block deals with comments embedded in values that are not surrounded by parentheses.
+                //
+                // The aim is that future Specifications will enclose them in parentheses and this section.
+                // However, the block will need to remain in order to allow use with earlier Specifications.
+
+                int dashPosn = temp.IndexOf("- ");
+
+                if (dashPosn >= 0)
+                {
+                    string[] parts = [
+                        temp[..dashPosn].Trim(),
+                        temp[(dashPosn + 1)..].Trim() ];
+
+                    if (parts[1].Contains("for contacts made before", StringComparison.OrdinalIgnoreCase))
+                    {
+                        deleted = true;
+                        if (parts[0].Length > 0)
+                        {
+                            newValue = parts[0];
+                        }
+                    }
+                    else if (parts[1].Contains("for contacts made on or after", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (parts[0].Length > 0)
+                        {
+                            newValue = parts[0];
+                        }
+                    }
+                    else if (parts[1].Contains("referred to", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (parts[0].Length > 0)
+                        {
+                            newValue = parts[0];
+                        }
+                    }
+                    else
+                    {
+                        throw new AdifException($"Unexpected comment string found: value='{value}'");
+                    }
+                    commentList.Insert(0, parts[1]);
+                }
+            }
+
+            {
+                comments = new(256);
+
+                for (int i = 0; i < commentList.Count; i++)
+                {
+                    if (string.IsNullOrEmpty(commentList[i]))
+                    {
+                        throw new AdifException($"Empty or null comment found for value: \"{value}\"");
+                    }
+
+                    if (i > 0)
+                    {
+                        _ = comments.Append("; ");
+                    }
+                    if (adjustedZabaykalskyKrajValue)
+                    {
+                        commentList[i] = commentList[i].Replace("[", "(").Replace("]", ")");
+                    }
+                    _ = comments.Append(commentList[i]);
+                }
+            }
+            return newValue;
+        }
         internal void Export()
         {
             OrderColumnsForExport(
@@ -551,12 +699,12 @@ namespace AdifExportFilesCreator
 
             string baseFileName = $"enumerations_{Name.ToLower()}";
 #pragma warning disable format
-            ExportToCsvTsvExcel (
+            ExportToCsvTsvExcel(
                 Name,
                 baseFileName,
                 orderedHeaderRecord,
                 orderedValueRecords);
-            ExportToXml         (
+            ExportToXml(
                 Name,
                 baseFileName,
                 orderedHeaderRecord,
@@ -989,20 +1137,14 @@ namespace AdifExportFilesCreator
                 defaultTitles = string.Join(",", htmlFieldNames);
             }
 
-            return string.Format(
-                "{0},{1},{2},{3}",
-                "Enumeration Name",
-                defaultTitles,
-                "Import-only",
-                "Comments").Split([',']);
+            return $"{"Enumeration Name"},{defaultTitles},{"Import-only"},{"Comments"}".Split([',']);
         }
 #pragma warning disable format
-        private static AdifReleaseLib.CsvWriter     AllCsvWriter        = null;
-        private static AdifReleaseLib.TsvWriter     AllTsvWriter        = null;
-        private static AdifReleaseLib.ExcelWriter   AllExcelWriter      = null;
-        private static XmlDocument                  AllXmlDoc           = null;
-        private static XmlElement                   AllEnumerationsEl   = null;
-
+        private static AdifReleaseLib.CsvWriter     AllCsvWriter =              null;
+        private static AdifReleaseLib.TsvWriter     AllTsvWriter =              null;
+        private static AdifReleaseLib.ExcelWriter   AllExcelWriter =            null;
+        private static XmlDocument                  AllXmlDoc =                 null;
+        private static XmlElement                   AllEnumerationsEl =         null;
         private static AdifExportObjects.Export     AllEnumerationsJsonExport = null;
 #pragma warning restore format
 
