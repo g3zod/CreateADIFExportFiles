@@ -358,6 +358,7 @@ namespace AdifExportFilesCreator
         private readonly string[] SupportedVersions = [
             "3.1.4",
             "3.1.5",
+            "3.1.6",
         ];
 
         private readonly string[] SupportedStatuses = [
@@ -799,6 +800,8 @@ Enumeration E
 Location L
 ";
 
+        private const string ExpectedResults_316 = ExpectedResults_315;
+
         /**
          * <summary>
          *   This performs some tests on the all.json file by de-serializing its contents into
@@ -825,6 +828,7 @@ Location L
             {
                 "3.1.4" => ExpectedResults_314,
                 "3.1.5" => ExpectedResults_315,
+                "3.1.6" => ExpectedResults_316,
                 _ => string.Empty,
             };
 
@@ -1098,6 +1102,7 @@ Location L
             }
         }
 
+        private static readonly byte[] Utf8Bom = [0xEF, 0xBB, 0xBF];
 
         /**
          * <summary>
@@ -1125,28 +1130,36 @@ Location L
             try
             {
                 xmlDocIn.PreserveWhitespace = true;
+                Encoding adifDocEncoding;
 
-                using (StreamReader htmlDocInStream = new(adifDocPath, Common.Windows1252Encoding))
+                // Determine whether the file is Windows-1252 (versions up to 3.1.5) or UTF-8 (versions 3.1.6 onwards).
+
+                using (FileStream s = new(adifDocPath, FileMode.Open, FileAccess.Read, FileShare.Read))
                 {
-                    using StreamWriter tempDocStream = new(tempDocPath, false, Common.Windows1252Encoding);
+                    byte[] buffer = new byte[Utf8Bom.Length];
 
-                    //while (!htmlDocInStream.ReadLine().Contains("<html"));      // Skip <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+                    int bytesRead = s.Read(buffer, 0, buffer.Length);
 
-                    //tempDocStream.WriteLine("<?xml version=\"1.0\" encoding=\"windows-1252\" ?>");
-                    //tempDocStream.WriteLine("<html>");
+                    if (bytesRead != Utf8Bom.Length)
+                    {
+                        throw new AdifException($"Failed to read first 3 bytes from {adifDocPath} to determine encoding");
+                    }
+                    adifDocEncoding = buffer.SequenceEqual(Utf8Bom) ?
+                        Encoding.UTF8 :
+                        Common.Windows1252Encoding;
+                }
 
-                    //while (!htmlDocInStream.EndOfStream)
-                    //{
-                    //    tempDocStream.WriteLine(htmlDocInStream.ReadLine().Replace("&nbsp;", " "));  // The character entity &nbsp; is not declared by default in XML.                            
-                    //}
+                using (StreamReader htmlDocInStream = new(adifDocPath, adifDocEncoding))
+                {
+                    // Re-write the document as a true XML file and add an internal DTD to replace &nbsp; character
+                    // entities with a space.  (To be pedantic, it should replace them with &#160; but there is
+                    // no point because this program replaces all white-space sequences with a single space anyway.)
 
-                    // The following is a revised version of the above that uses an internal DTD to replace &nbsp; with
-                    // a space instead of replacing them in the code here.  Both methods work, but this new one feels
-                    // less of a "hack".
+                    using StreamWriter tempDocStream = new(tempDocPath, false, adifDocEncoding);
 
                     while (!htmlDocInStream.ReadLine().Contains("<html")) { };      // Skip <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 
-                    tempDocStream.WriteLine("<?xml version=\"1.0\" encoding=\"windows-1252\" ?>");
+                    tempDocStream.WriteLine($"<?xml version=\"1.0\" encoding=\"{adifDocEncoding.WebName}\" ?>");
                     tempDocStream.WriteLine("<!DOCTYPE html [ <!ENTITY nbsp \" \"> ]>");
                     tempDocStream.WriteLine("<html>");
 
@@ -1156,12 +1169,41 @@ Location L
                     }
                 }
 
-                // When using .NET 8, passing xmlDocIn.Load() a file name will fail because it cannot
-                // deal with the Windows-1252 encoding.  To prevent this, it's necessary to set up a StreamReader with
-                // a Windows-1252 encoding object and use that with xmlDocIn.Load
+                // For ADIF 3.1.4 and 3.1.5, passing xmlDocIn.Load() a file name will fail because it cannot deal with
+                // Windows-1252 encoding.  To overcome this, it is necessary to set up a StreamReader with a Windows-1252
+                // encoding object and use that with xmlDocIn.Load()
+                //
+                // While that's not a problem for ADIF 3.1.6 and later because they will be UTF-8 encoded, the same code
+                // using a StreamReader will of course work fine.
 
-                using StreamReader sw = new(tempDocPath, Common.Windows1252Encoding);
+                using StreamReader sw = new(tempDocPath, adifDocEncoding);
                 xmlDocIn.Load(sw);
+
+                XmlElement meta = (XmlElement)xmlDocIn.DocumentElement.SelectSingleNode("head/meta[@http-equiv='Content-Type']") ??
+                    throw new AdifException($"meta http-equiv element not found in the ADIF Specification copy {tempDocPath}");
+                string contentAttribute = meta.Attributes["content"].Value;
+
+                // Ensure the encoding declared in the ADIF Specification matches whether or not the file has a UTF-8 byte order mark.
+                // This could happen if the ADIF Specification declares itself as UTF-8 but has been saved without the byte order mark.
+
+                if (contentAttribute.Contains("1252", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (adifDocEncoding != Common.Windows1252Encoding)
+                    {
+                        throw new AdifException($"The encoding in the ADIF Specification is \"{contentAttribute}\" but the file is UTF-8 encoded");
+                    }
+                }
+                else if (contentAttribute.Contains("utf-8", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (adifDocEncoding != Encoding.UTF8)
+                    {
+                        throw new AdifException($"The encoding in the ADIF Specification is \"{contentAttribute}\" but the file is not UTF-8 encoded");
+                    }
+                }
+                else
+                {
+                    throw new AdifException($"The encoding in the ADIF Specification {contentAttribute} is not windows-1252 or utf-8");
+                }
             }
             finally
             {
