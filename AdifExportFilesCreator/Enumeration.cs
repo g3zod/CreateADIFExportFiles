@@ -32,7 +32,8 @@ namespace AdifExportFilesCreator
         private const string
             PrimaryAdministrativeSubdivisionName        = "Primary_Administrative_Subdivision",
             SecondaryAdministrativeSubdivisionName      = "Secondary_Administrative_Subdivision",
-            SecondaryAdministrativeSubdivisionAltName   = "Secondary_Administrative_Subdivision_Alt";
+            SecondaryAdministrativeSubdivisionAltName   = "Secondary_Administrative_Subdivision_Alt",
+            RegionName                                  = "Region";
 
         private readonly List<string>               fieldNames      = new(MaxFields);
         private readonly List<string[]>             fields          = new(MaxFields);
@@ -852,7 +853,9 @@ namespace AdifExportFilesCreator
             Adif adif = export.Adif;
 
             {
-                bool isPrimaryAdministrativeSubdivision = enumerationName == PrimaryAdministrativeSubdivisionName;
+                bool
+                    isPrimaryAdministrativeSubdivision = enumerationName == PrimaryAdministrativeSubdivisionName,
+                    isRegionEnumeration = enumerationName == RegionName;
 
                 int dxccEntityCodeColumnIndex = -1,
                     deletedColumnIndex = -1;
@@ -882,44 +885,44 @@ namespace AdifExportFilesCreator
                 };
                 adif.Enumerations = [];
 
-                if (Specification.ExportJsonRecordsAlt)
-                {
-                    enumeration.RecordsAlt = [];
+                //if (Specification.ExportJsonRecordsAlt)
+                //{
+                //    enumeration.RecordsAlt = [];
 
-                    foreach (string[] valueRecord in valueRecords)
-                    {
-                        int i = 0;
+                //    foreach (string[] valueRecord in valueRecords)
+                //    {
+                //        int i = 0;
 
-                        Record record = [];
+                //        Record record = [];
 
-                        foreach (string value in valueRecord)
-                        {
-                            if ((!addEmptyValues) || value.Length > 0)
-                            {
-                                string title = headerRecord[i];
+                //        foreach (string value in valueRecord)
+                //        {
+                //            if ((!addEmptyValues) || value.Length > 0)
+                //            {
+                //                string title = headerRecord[i];
 
-                                switch (title.ToUpper())
-                                {
-                                    case "DELETED":
-                                    case "IMPORT-ONLY":
-                                        record.Add(title, Specification.JsonTrueAsString);
-                                        break;
+                //                switch (title.ToUpper())
+                //                {
+                //                    case "DELETED":
+                //                    case "IMPORT-ONLY":
+                //                        record.Add(title, Specification.JsonTrueAsString);
+                //                        break;
 
-                                    case "DELETED DATE":
-                                    case "FROM DATE":
-                                        record.Add(title, Specification.ConvertDateToJsonUtcString(value));
-                                        break;
+                //                    case "DELETED DATE":
+                //                    case "FROM DATE":
+                //                        record.Add(title, Specification.ConvertDateToJsonUtcString(value));
+                //                        break;
 
-                                    default:
-                                        record.Add(title, value);
-                                        break;
-                                }
-                            }
-                            i++;
-                        }
-                        enumeration.RecordsAlt.Add(record);
-                    }
-                }
+                //                    default:
+                //                        record.Add(title, value);
+                //                        break;
+                //                }
+                //            }
+                //            i++;
+                //        }
+                //        enumeration.RecordsAlt.Add(record);
+                //    }
+                //}
                 
                 if (Specification.ExportJsonRecords)
                 {
@@ -988,8 +991,17 @@ namespace AdifExportFilesCreator
                                     abbreviation = $"{abbreviation}.{dxccEntityCode}";
                                     if (deleted.Length > 0)
                                     {
-                                        abbreviation = $"{abbreviation}.{deleted}";
+                                        abbreviation = $"{abbreviation}.{deleted}.0";
                                     }
+                                }
+                                else if (isRegionEnumeration &&
+                                         abbreviation != "NONE")
+                                {
+                                    // The Region table has three rows with Region Entity Code set to "KO",
+                                    // so the key is made unique by appending a dot and the DXCC Entity Code,
+                                    // e.g. KO.296
+
+                                    abbreviation = $"{value}.{valueRecord[dxccEntityCodeColumnIndex]}";
                                 }
                             }
 

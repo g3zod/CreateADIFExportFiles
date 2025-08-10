@@ -415,38 +415,38 @@ namespace AdifExportFilesCreator
                 };
                 adif.Fields = fields;
 
-                if (Specification.ExportJsonRecordsAlt)
-                {
-                    fields.RecordAlt = [];
+                //if (Specification.ExportJsonRecordsAlt)
+                //{
+                //    fields.RecordAlt = [];
 
-                    foreach (string[] valueRecord in valueRecords)
-                    {
-                        int i = 0;
+                //    foreach (string[] valueRecord in valueRecords)
+                //    {
+                //        int i = 0;
 
-                        Record record = [];
+                //        Record record = [];
 
-                        foreach (string value in valueRecord)
-                        {
-                            if ((!addEmptyValues) || value.Length > 0)
-                            {
-                                switch (headerRecord[i].ToUpper())
-                                {
-                                    case "DELETED":
-                                    case "IMPORT-ONLY":
-                                    case "HEADER FIELD":
-                                        record.Add(headerRecord[i], Specification.JsonTrueAsString);
-                                        break;
+                //        foreach (string value in valueRecord)
+                //        {
+                //            if ((!addEmptyValues) || value.Length > 0)
+                //            {
+                //                switch (headerRecord[i].ToUpper())
+                //                {
+                //                    case "DELETED":
+                //                    case "IMPORT-ONLY":
+                //                    case "HEADER FIELD":
+                //                        record.Add(headerRecord[i], Specification.JsonTrueAsString);
+                //                        break;
 
-                                    default:
-                                        record.Add(headerRecord[i], value);
-                                        break;
-                                }
-                            }
-                            i++;
-                        }
-                        fields.RecordAlt.Add(record);
-                    }
-                }
+                //                    default:
+                //                        record.Add(headerRecord[i], value);
+                //                        break;
+                //                }
+                //            }
+                //            i++;
+                //        }
+                //        fields.RecordAlt.Add(record);
+                //    }
+                //}
 
                 if (Specification.ExportJsonRecords)
                 {

@@ -46,7 +46,6 @@ namespace AdifExportFilesCreator
         {
             public Header Header { get; set; }
             public Records Records { get; set; }
-            public RecordsAlt RecordsAlt { get; set; }
         }
 
         /**
@@ -65,7 +64,6 @@ namespace AdifExportFilesCreator
         {
             public Header Header { get; set; }
             public Records Records { get; set; }
-            public RecordsAlt RecordAlt { get; set; }
         }
 
         /**
@@ -77,7 +75,6 @@ namespace AdifExportFilesCreator
         {
             public Header Header { get; set; }
             public Records Records { get; set; }
-            public RecordsAlt RecordsAlt { get; set; }
         }
 
         /**
@@ -86,13 +83,6 @@ namespace AdifExportFilesCreator
          * </summary>
          */
         public class Header : List<string> { }
-
-        /**
-         * <summary>
-         *   This represents an un-named list of records.
-         * </summary>
-         */
-        public class RecordsAlt : List<Record> { }
 
         /**
          * <summary>
