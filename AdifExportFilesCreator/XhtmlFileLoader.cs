@@ -8,16 +8,6 @@ using System.Xml;
 
 namespace AdifExportFilesCreator
 {
-    /**
-     * <summary>
-     *   This class provides a method that loads an XHTML file into an XmlDocument object.<br />
-     *   <br />
-     *   It is used in two solutions:<br />
-     *   <br />
-     *   [1] HtmlLinkChecker:       https://github.com/g3zod/HtmlLinkChecker (private)<br />
-     *   [2] CreateADIFExportFiles: https://github.com/g3zod/CreateADIFExportFiles (public)
-     * </summary>
-     */
     internal class XhtmlFileLoader
     {
         private static readonly byte[] Utf8Bom = [0xEF, 0xBB, 0xBF];
@@ -30,7 +20,7 @@ namespace AdifExportFilesCreator
          *   This method loads an XHTML file into an XmlDocument object.<br />
          *   <br />
          *   There are limitations suited to dealing with the specific XHTML files the program is designed for.<br />
-         *   - The file is either Windows-1252 or UTF-8 encoded.<br />
+         *   - The file is Windows-1252, UTF-8, or ISO-88591-1 encoded.<br />
          *   - The file is well-formed XHTML set up for HTML backwards compatibility including a text/html mime type.<br />
          *   - The only character entity supported is nbsp (non-breaking space).
          * </summary>
@@ -154,6 +144,11 @@ namespace AdifExportFilesCreator
                     {
                         throw new FileLoadException($"The encoding in the XHTML file is \"{contentAttribute}\" but the file is not UTF-8 encoded");
                     }
+                }
+                else if (contentTypeCharset == "iso-8859-1")
+                {
+                    // ISO-8859-1 is a subset of UTF-8, so no check is necessary; if the file is UTF-8 encoded, it will be fine and
+                    // otherwise it's impractical to discover whether the file itself is actually ISO-8859-1 encoded.
                 }
                 else
                 {
