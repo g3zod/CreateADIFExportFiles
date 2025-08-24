@@ -8,6 +8,16 @@ using System.Xml;
 
 namespace AdifExportFilesCreator
 {
+    /**
+     * <summary>
+     *   This class provides a method that loads an XHTML file into an XmlDocument object.<br />
+     *   <br />
+     *   It is used in two solutions:<br />
+     *   <br />
+     *   [1] XhtmlLinkChecker:      https://github.com/g3zod/XhtmlLinkChecker (private)<br />
+     *   [2] CreateADIFExportFiles: https://github.com/g3zod/CreateADIFExportFiles (public)
+     * </summary>
+     */
     internal class XhtmlFileLoader
     {
         private static readonly byte[] Utf8Bom = [0xEF, 0xBB, 0xBF];
