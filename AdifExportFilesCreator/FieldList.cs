@@ -494,7 +494,7 @@ namespace AdifExportFilesCreator
 
             string json = JsonSerializer.Serialize(export, typeof(Export), Specification.JsonSerializerOptions);
 
-            File.WriteAllText(filePath, json, Encoding.UTF8);
+            File.WriteAllText(filePath, json, Specification.JSONFileEncoding);
 
             AdifReleaseLib.Common.SetFileTimesToNow(filePath);
         }

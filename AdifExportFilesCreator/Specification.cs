@@ -52,7 +52,7 @@
  *
  * Notes:
  * 
- *  * The CSV, TSV, XML, and JSON files are encoded as UTF-8 with a byte order mark (BOM) of 0xEF, 0xBB, 0xBF at the
+ *  * The CSV, TSV, and XML files are encoded as UTF-8 with a byte order mark (BOM) of 0xEF, 0xBB, 0xBF at the
  *    start of the file.  These 3 bytes can be ignored but are included for compatibility with Microsoft software.
  * 
  *  * CSV file values are enclosed by double quotes (") and any double quotes embedded within the value are
@@ -185,11 +185,6 @@ namespace AdifExportFilesCreator
      *   The files comprise CSV (.csv), TSV (.tsv), XML (.xml), Microsoft Excel (.xlsx), and Apache OpenOffice Calc (.ods) files
      *   containing data types, enumerations, and fields.
      * </summary>
-     * 
-     * <remarks>
-     *   Also JSON (.json) is now created but for the time being is not officially included in ADIF releases.
-     * </remarks>
-     * 
      */
     public class Specification
     {
@@ -212,6 +207,16 @@ namespace AdifExportFilesCreator
             adifStatusMetaName =    "adifstatus",
             adifDateMetaName =      "adifdate";  // Introduced at the proposed version of ADIF 3.1.5 dated 2024/11/06.
 #pragma warning restore layout, IDE0055, IDE0079
+
+        /**
+         * <summary>
+         *   Creates a UTF-8 encoding object that does not emit a byte order mark (BOM) and throws an exception for invalid characters.
+         *   
+         *   This is for use with JSON because the JSON standard RFC 8259 specifies UTF-8 without a BOM:
+         *   https://datatracker.ietf.org/doc/html/rfc8259
+         * </summary>
+         */
+        internal static readonly Encoding JSONFileEncoding = new UTF8Encoding(false, true);
 
         /**
          * <summary>
@@ -748,7 +753,7 @@ namespace AdifExportFilesCreator
                 string allJsonFileName = Path.Combine(ExportsJsonPath, "all.json");
                 string json = JsonSerializer.Serialize(AllJsonExport, JsonSerializerOptions);
 
-                File.WriteAllText(allJsonFileName, json, Encoding.UTF8);
+                File.WriteAllText(allJsonFileName, json, JSONFileEncoding);
                 Common.SetFileTimesToNow(allJsonFileName);
 
                 ValidateAllJson(allJsonFileName);

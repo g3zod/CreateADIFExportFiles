@@ -1049,7 +1049,7 @@ namespace AdifExportFilesCreator
 
             string json = JsonSerializer.Serialize(export, typeof(Export), Specification.JsonSerializerOptions);
 
-            File.WriteAllText(filePath, json, Encoding.UTF8);
+            File.WriteAllText(filePath, json, Specification.JSONFileEncoding);
 
             AdifReleaseLib.Common.SetFileTimesToNow(filePath);
         }
@@ -1255,7 +1255,7 @@ namespace AdifExportFilesCreator
 
                     AllEnumerationsJsonExport = null;
 
-                    File.WriteAllText(allJsonFileName, json, Encoding.UTF8);
+                    File.WriteAllText(allJsonFileName, json, Specification.JSONFileEncoding);
 
                     AdifReleaseLib.Common.SetFileTimesToNow(allJsonFileName);
                 }
