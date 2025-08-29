@@ -309,6 +309,7 @@ namespace AdifReleaseLib
         {
             if (application != null)
             {
+                application.DisplayAlerts = false;  // In the case of an exception, stop Excel from prompting to save any open Workbooks.
                 application.Quit();
                 application = null;
             }

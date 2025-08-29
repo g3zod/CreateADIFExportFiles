@@ -6,6 +6,7 @@ using System.Text;
 using System.Xml;
 using System.Text.Json;
 using AdifExportFilesCreator.AdifExportObjects;
+using System.Text.RegularExpressions;
 
 namespace AdifExportFilesCreator
 {
@@ -16,12 +17,8 @@ namespace AdifExportFilesCreator
      *   <br/>
      *   The files comprise CSV (.csv), TSV (.tsv), XML (.xml), Microsoft Excel (.xlsx), and Apache OpenSource Calc (.ods) files.
      * </summary>
-     * 
-     * <remarks>
-     *   Also JSON (.json) is now created but for the time being is not officially included in ADIF releases.
-     * </remarks>
      */
-    internal class Enumeration
+    internal partial class Enumeration
     {
         private const int MaxFields = 20;
         private static readonly char[] commaSplitChar = [','];
@@ -1022,7 +1019,22 @@ namespace AdifExportFilesCreator
                                         break;
 
                                     default:
-                                        record.Add(title, value);
+                                        if (isRegionEnumeration &&
+                                            (title.Equals("START DATE", StringComparison.OrdinalIgnoreCase) ||
+                                             title.Equals("END DATE", StringComparison.OrdinalIgnoreCase)))
+                                        {
+                                            record.Add(title, Specification.ConvertDateToJsonUtcString(value));
+                                        }
+                                        else
+                                        {
+                                            if (IsRawExportDate(value))
+                                            {
+                                                // Dates should always be exported in the YYYY-DD-MMT00:00:00Z format.
+
+                                                throw new AdifException($"Unexpected date while exporting JSON for '{title}' in enumeration '{enumerationName}': value='{value}'");
+                                            }
+                                            record.Add(title, value);
+                                        }
                                         break;
                                 }
                             }
@@ -1307,6 +1319,24 @@ namespace AdifExportFilesCreator
             {
                 dxccEntity = -1;
             }
+        }
+
+        [GeneratedRegex(@"^\d{4}-\d{2}-\d{2}$")]
+        private static partial Regex RawExportDate();
+
+        /**
+         * <summary>
+         *   When exporting JSON, this determines if a string has inadvertently not been converted from the form YYYY-MM-DD
+         *   to YYYY-MM-DDT00:00:00Z
+         * </summary>
+         * 
+         * <param name="text">The text to be tested.</param>
+         * 
+         * <returns>true if the date is in the form YYYY-MM-DD</returns>
+         */
+        private static bool IsRawExportDate(string text)
+        {
+            return RawExportDate().IsMatch(text);
         }
     }
 }
