@@ -15,10 +15,10 @@ namespace AdifExportFilesCreator
      *   This class exports the enumerations in the ADIF Specification XHTML file as associated files for
      *   including in the released files.<br/>
      *   <br/>
-     *   The files comprise CSV (.csv), TSV (.tsv), XML (.xml), Microsoft Excel (.xlsx), and Apache OpenSource Calc (.ods) files.
+     *   The files comprise CSV (.csv), TSV (.tsv), XML (.xml), Microsoft Excel (.xlsx), Apache OpenSource Calc (.ods), and JSON files.
      * </summary>
      */
-    internal partial class Enumeration
+    internal class Enumeration
     {
         private const int MaxFields = 20;
         private static readonly char[] commaSplitChar = [','];
@@ -948,30 +948,19 @@ namespace AdifExportFilesCreator
                                     // Also, Property names are duplicated when a code has two records for a single
                                     // DXCC entity where one code is marked as "Deleted".
                                     //
-                                    // To cater for this, the Property name has ".Deleted" appended, for example:
-                                    //   "051.5.Deleted"
-                                    //
-                                    // There is a potential flaw in this if there is the same "Code" has more than one
-                                    // "Deleted" record within a DXCC.  This has not happened so far.
-                                    // Possibly such future "Deleted" records could be merged in the ADIF Specification
-                                    // and there would be no issue.
-                                    //
-                                    // An alternative approach could be to include a serial number in the Property name,
+                                    // To cater for this and if in the future there the same "Code" has more than one
+                                    // "Deleted" record within a DXCC, a serial number is also included in the Property name,
                                     // e.g.
                                     //   "051.5.Deleted.0"
                                     //   "051.5.Deleted.1"
                                     //   ...
-                                    //
-                                    // However, the issue with that is allocating the serial number such that does not
-                                    // change between releases of the ADIF Specification ... although that could be
-                                    // avoided by being careful with the order of records in the ADIF Specification.
                                     //
                                     // While having more complex property names than code.dxcc makes them difficult to find
                                     // using indexing, it is still possible to find them by iterating through the array of
                                     // properties and inspecting the "Code" key/value pair, in which the "Code" value is
                                     // unadorned.  Here is an example - note that "Code" just contains "051":
                                     /*
-                                          "051.5.Deleted": {
+                                          "051.5.Deleted.0": {
                                             "Enumeration Name": "Primary_Administrative_Subdivision",
                                             "Code": "051",
                                             "Primary Administrative Subdivision": "Märket",
@@ -1027,7 +1016,7 @@ namespace AdifExportFilesCreator
                                         }
                                         else
                                         {
-                                            if (IsRawExportDate(value))
+                                            if (Specification.IsRawExportDate(value))
                                             {
                                                 // Dates should always be exported in the YYYY-DD-MMT00:00:00Z format.
 
@@ -1319,24 +1308,6 @@ namespace AdifExportFilesCreator
             {
                 dxccEntity = -1;
             }
-        }
-
-        [GeneratedRegex(@"^\d{4}-\d{2}-\d{2}$")]
-        private static partial Regex RawExportDate();
-
-        /**
-         * <summary>
-         *   When exporting JSON, this determines if a string has inadvertently not been converted from the form YYYY-MM-DD
-         *   to YYYY-MM-DDT00:00:00Z
-         * </summary>
-         * 
-         * <param name="text">The text to be tested.</param>
-         * 
-         * <returns>true if the date is in the form YYYY-MM-DD</returns>
-         */
-        private static bool IsRawExportDate(string text)
-        {
-            return RawExportDate().IsMatch(text);
         }
     }
 }

@@ -163,6 +163,7 @@
  *    that the header record contains the expected title for that column.
  */
 
+using AdifReleaseLib;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -171,9 +172,9 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using System.Text.Unicode;
 using System.Xml;
-using AdifReleaseLib;
 
 namespace AdifExportFilesCreator
 {
@@ -186,7 +187,7 @@ namespace AdifExportFilesCreator
      *   containing data types, enumerations, and fields.
      * </summary>
      */
-    public class Specification
+    public partial class Specification
     {
 #pragma warning disable IDE0079
 #pragma warning disable layout, IDE0055
@@ -1281,6 +1282,24 @@ Location L
                     Created = DateTime.UtcNow.Truncate(TimeSpan.TicksPerSecond)
                 }
             };
+        }
+
+        [GeneratedRegex(@"^\d{4}-\d{2}-\d{2}$")]
+        private static partial Regex RawExportDate();
+
+        /**
+         * <summary>
+         *   When exporting JSON, this determines if a string has inadvertently not been converted from the form YYYY-MM-DD
+         *   to YYYY-MM-DDT00:00:00Z
+         * </summary>
+         * 
+         * <param name="text">The text to be tested.</param>
+         * 
+         * <returns>true if the date is in the form yyyy-mm-dd and otherwise, false</returns>
+         */
+        internal static bool IsRawExportDate(string text)
+        {
+            return RawExportDate().IsMatch(text);
         }
     }
 }

@@ -15,12 +15,8 @@ namespace AdifExportFilesCreator
      *   xports the fields in the ADIF Specification XHTML file as associated files for
      *   including in the released files.<br/>
      *   <br/>
-     *   The files comprise CSV (.csv), TSV (.tsv), XML (.xml), Microsoft Excel (.xlsx), and Apache OpenSource Calc (.ods) files.
+     *   The files comprise CSV (.csv), TSV (.tsv), XML (.xml), Microsoft Excel (.xlsx), Apache OpenSource Calc (.ods), and JSON files.
      * </summary>
-     * 
-     * <remarks>
-     *   Also JSON (.json) is now created but for the time being is not officially included in ADIF releases.
-     * </remarks>
      */
     internal partial class FieldList
     {
@@ -478,6 +474,12 @@ namespace AdifExportFilesCreator
                                         break;
 
                                     default:
+                                        if (Specification.IsRawExportDate(value))
+                                        {
+                                            // Dates should always be exported in the YYYY-DD-MMT00:00:00Z format.
+
+                                            throw new AdifException($"Unexpected date while exporting JSON for '{headerRecord[i]}' in Field: value='{value}'");
+                                        }
                                         record.Add(headerRecord[i], value);
                                         break;
                                 }
