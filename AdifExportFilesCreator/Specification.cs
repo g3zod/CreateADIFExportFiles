@@ -366,6 +366,7 @@ namespace AdifExportFilesCreator
             "3.1.5",
             "3.1.6",
             "3.1.7",
+            "3.1.8",
         ];
 
         private readonly string[] SupportedStatuses = [
@@ -810,7 +811,8 @@ Location L
 
         private const string
             ExpectedResults_316 = ExpectedResults_315,
-            ExpectedResults_317 = ExpectedResults_316;
+            ExpectedResults_317 = ExpectedResults_316,
+            ExpectedResults_318 = ExpectedResults_316;
 
         /**
          * <summary>
@@ -840,6 +842,7 @@ Location L
                 "3.1.5" => ExpectedResults_315,
                 "3.1.6" => ExpectedResults_316,
                 "3.1.7" => ExpectedResults_317,
+                "3.1.8" => ExpectedResults_317,
                 _ => string.Empty,
             };
 
